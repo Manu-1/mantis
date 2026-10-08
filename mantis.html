@@ -1,0 +1,1898 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Mantis - Sistema de Confiabilidad y Mantenimiento</title>
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- FontAwesome Icons -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <!-- Chart.js -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <!-- Alpine.js for interactivity -->
+    <script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js"></script>
+    <!-- Google Fonts -->
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    fontFamily: {
+                        sans: ['Inter', 'sans-serif'],
+                    },
+                    colors: {
+                        brand: {
+                            50: '#f0f4f8',
+                            100: '#d9e2ec',
+                            500: '#102a43',
+                            600: '#0b69a3',
+                            700: '#035388',
+                            800: '#014361',
+                            900: '#002147',
+                        },
+                        gold: {
+                            400: '#fbbf24',
+                            500: '#d97706',
+                            600: '#b45309',
+                        }
+                    }
+                }
+            }
+        }
+    </script>
+    <style>
+        [x-cloak] { display: none !important; }
+        .custom-scrollbar::-webkit-scrollbar {
+            width: 6px;
+            height: 6px;
+        }
+        .custom-scrollbar::-webkit-scrollbar-track {
+            background: #f1f5f9;
+        }
+        .custom-scrollbar::-webkit-scrollbar-thumb {
+            background: #cbd5e1;
+            border-radius: 4px;
+        }
+        .custom-scrollbar::-webkit-scrollbar-thumb:hover {
+            background: #94a3b8;
+        }
+    </style>
+</head>
+<body class="bg-slate-100 font-sans text-slate-800 antialiased min-h-screen" x-data="appData()" x-init="initCharts()">
+
+    <div class="flex h-screen overflow-hidden">
+        
+        <!-- Sidebar Layout -->
+        <aside class="w-64 bg-brand-900 text-white flex flex-col z-30 flex-shrink-0 shadow-xl hidden md:flex">
+            <!-- Brand Logo & Header -->
+            <div class="p-5 border-b border-brand-800 flex items-center space-x-3">
+                <div class="w-10 h-10 rounded-lg bg-gradient-to-br from-gold-400 to-gold-600 flex items-center justify-center text-brand-900 font-bold text-xl shadow-md">
+                    <i class="fa-solid fa-shield-halved"></i>
+                </div>
+                <div>
+                    <h1 class="font-bold text-lg leading-tight tracking-wide text-white">MANTIS</h1>
+                    <p class="text-xs text-brand-100 font-light opacity-80">Confiabilidad & Activos</p>
+                </div>
+            </div>
+
+            <!-- Main Navigation Links -->
+            <nav class="flex-1 px-3 py-4 space-y-1 overflow-y-auto custom-scrollbar">
+                <div class="px-3 pb-2 text-[10px] uppercase font-semibold text-slate-400 tracking-wider">Gestión Principal</div>
+                
+                <button @click="currentTab = 'dashboard'" :class="currentTab === 'dashboard' ? 'bg-brand-700 text-white font-medium' : 'text-slate-300 hover:bg-brand-800 hover:text-white'" class="w-full flex items-center space-x-3 px-3 py-2.5 rounded-lg transition-colors text-sm">
+                    <i class="fa-solid fa-chart-line w-5 text-center text-gold-400"></i>
+                    <span>Dashboard General</span>
+                </button>
+
+                <button @click="currentTab = 'inventory'" :class="currentTab === 'inventory' ? 'bg-brand-700 text-white font-medium' : 'text-slate-300 hover:bg-brand-800 hover:text-white'" class="w-full flex items-center space-x-3 px-3 py-2.5 rounded-lg transition-colors text-sm">
+                    <i class="fa-solid fa-boxes-stacked w-5 text-center text-blue-400"></i>
+                    <span class="flex-1 text-left">Inventario de Equipos</span>
+                    <span class="bg-brand-800 text-xs px-2 py-0.5 rounded-full" x-text="filteredAssets.length"></span>
+                </button>
+
+                <button @click="currentTab = 'preventive'" :class="currentTab === 'preventive' ? 'bg-brand-700 text-white font-medium' : 'text-slate-300 hover:bg-brand-800 hover:text-white'" class="w-full flex items-center space-x-3 px-3 py-2.5 rounded-lg transition-colors text-sm">
+                    <i class="fa-solid fa-calendar-check w-5 text-center text-emerald-400"></i>
+                    <span>Mant. Preventivo</span>
+                </button>
+
+                <button @click="currentTab = 'workorders'" :class="currentTab === 'workorders' ? 'bg-brand-700 text-white font-medium' : 'text-slate-300 hover:bg-brand-800 hover:text-white'" class="w-full flex items-center space-x-3 px-3 py-2.5 rounded-lg transition-colors text-sm">
+                    <i class="fa-solid fa-screwdriver-wrench w-5 text-center text-amber-400"></i>
+                    <span class="flex-1 text-left">Órdenes de Trabajo</span>
+                    <span x-show="workOrders.filter(o => o.status !== 'Completada').length > 0" class="bg-amber-500 text-slate-900 font-bold text-xs px-2 py-0.5 rounded-full" x-text="workOrders.filter(o => o.status !== 'Completada').length"></span>
+                </button>
+
+                <!-- NUEVA SECCIÓN EN LA BARRA LATERAL: PROVEEDORES -->
+                <button @click="currentTab = 'suppliers'" :class="currentTab === 'suppliers' ? 'bg-brand-700 text-white font-medium' : 'text-slate-300 hover:bg-brand-800 hover:text-white'" class="w-full flex items-center space-x-3 px-3 py-2.5 rounded-lg transition-colors text-sm relative">
+                    <i class="fa-solid fa-handshake w-5 text-center text-orange-400"></i>
+                    <span class="flex-1 text-left">Proveedores & Mantenimientos</span>
+                    <span class="bg-orange-500 text-slate-900 font-bold text-[10px] px-2 py-0.5 rounded-full" x-text="suppliers.length"></span>
+                </button>
+
+                <div class="pt-4 px-3 pb-2 text-[10px] uppercase font-semibold text-slate-400 tracking-wider">Avanzado</div>
+
+                <button @click="currentTab = 'telemetry'" :class="currentTab === 'telemetry' ? 'bg-brand-700 text-white font-medium' : 'text-slate-300 hover:bg-brand-800 hover:text-white'" class="w-full flex items-center space-x-3 px-3 py-2.5 rounded-lg transition-colors text-sm">
+                    <i class="fa-solid fa-microchip w-5 text-center text-purple-400"></i>
+                    <span>Monitoreo & Telemetría</span>
+                    <span class="w-2 h-2 rounded-full bg-emerald-400 animate-ping"></span>
+                </button>
+
+                <button @click="currentTab = 'reports'" :class="currentTab === 'reports' ? 'bg-brand-700 text-white font-medium' : 'text-slate-300 hover:bg-brand-800 hover:text-white'" class="w-full flex items-center space-x-3 px-3 py-2.5 rounded-lg transition-colors text-sm">
+                    <i class="fa-solid fa-file-invoice-dollar w-5 text-center text-teal-400"></i>
+                    <span>Confiabilidad & Costos</span>
+                </button>
+            </nav>
+
+            <!-- Institutional Footer Badge -->
+            <div class="p-4 bg-brand-950 border-t border-brand-800 text-xs text-slate-400 flex items-center space-x-3">
+                <i class="fa-solid fa-church text-gold-400 text-base"></i>
+                <div>
+                    <p class="font-medium text-slate-200">Red de Centros Opus Dei</p>
+                    <p class="text-[10px] text-slate-400">Sistema Central de Gestión</p>
+                </div>
+            </div>
+        </aside>
+
+        <!-- Main Content Area -->
+        <div class="flex-1 flex flex-col h-screen overflow-hidden">
+
+            <header class="bg-white border-b border-slate-200 px-6 py-3.5 flex items-center justify-between z-20 shadow-sm">
+                
+                <!-- Left Section: Mobile Toggle & Center Selector -->
+                <div class="flex items-center space-x-4">
+                    <button class="md:hidden text-slate-600 hover:text-slate-800 text-xl" @click="mobileNavOpen = !mobileNavOpen">
+                        <i class="fa-solid fa-bars"></i>
+                    </button>
+
+                    <!-- Center / Location Selector -->
+                    <div class="flex items-center space-x-2 bg-slate-100 px-3 py-1.5 rounded-lg border border-slate-200">
+                        <i class="fa-solid fa-location-dot text-brand-600 text-sm"></i>
+                        <span class="text-xs font-semibold text-slate-500 uppercase tracking-wider hidden sm:inline">Centro:</span>
+                        <select x-model="selectedCenter" class="bg-transparent text-sm font-semibold text-slate-700 focus:outline-none cursor-pointer">
+                            <option value="ALL">🏛️ Todos los Centros (Consolidado Global)</option>
+                            <option value="Residencia Monteclaro">🏡 Residencia Universitaria Monteclaro</option>
+                            <option value="Casa El Solar">🌲 Casa de Convivencias El Solar</option>
+                            <option value="Centro Los Andes">🎓 Centro Universitario Los Andes</option>
+                            <option value="Colegio Los Arcos">🏫 Colegio Los Arcos</option>
+                            <option value="Sede Regional">🏛️ Sede Regional Central</option>
+                        </select>
+                    </div>
+                </div>
+
+                <!-- Right Section: Actions & Profile -->
+                <div class="flex items-center space-x-3">
+                    
+                    <!-- Simular Alerta Telemetria -->
+                    <button @click="triggerSimulatedAlert()" class="bg-amber-50 hover:bg-amber-100 text-amber-700 border border-amber-200 px-3 py-1.5 rounded-lg text-xs font-medium flex items-center space-x-1.5 transition-colors" title="Simular evento en tiempo real">
+                        <i class="fa-solid fa-bolt text-amber-500"></i>
+                        <span class="hidden sm:inline">Simular Alerta IoT</span>
+                    </button>
+
+                    <!-- Quick Issue Report Button -->
+                    <button @click="openReportModal = true" class="bg-brand-600 hover:bg-brand-700 text-white px-3.5 py-1.5 rounded-lg text-xs font-semibold flex items-center space-x-2 shadow-sm transition-all">
+                        <i class="fa-solid fa-triangle-exclamation text-amber-300"></i>
+                        <span>Reportar Falla</span>
+                    </button>
+
+                    <!-- Notifications Bell -->
+                    <div class="relative" x-data="{ open: false }">
+                        <button @click="open = !open" class="relative p-2 text-slate-500 hover:text-slate-700 hover:bg-slate-100 rounded-full transition-colors">
+                            <i class="fa-regular fa-bell text-lg"></i>
+                            <span x-show="alerts.length > 0" class="absolute top-1 right-1 w-2.5 h-2.5 bg-red-500 rounded-full ring-2 ring-white"></span>
+                        </button>
+
+                        <!-- Notification Dropdown -->
+                        <div x-show="open" @click.outside="open = false" x-cloak class="absolute right-0 mt-2 w-80 bg-white rounded-xl shadow-2xl border border-slate-200 py-2 z-50">
+                            <div class="px-4 py-2 border-b border-slate-100 flex items-center justify-between">
+                                <span class="font-semibold text-xs text-slate-700 uppercase">Alertas en Tiempo Real</span>
+                                <span class="text-[10px] bg-red-100 text-red-600 font-bold px-2 py-0.5 rounded-full" x-text="alerts.length"></span>
+                            </div>
+                            <div class="max-h-64 overflow-y-auto custom-scrollbar divide-y divide-slate-100">
+                                <template x-for="alert in alerts" :key="alert.id">
+                                    <div class="p-3 hover:bg-slate-50 transition-colors">
+                                        <div class="flex items-start space-x-2">
+                                            <i class="fa-solid fa-circle-exclamation text-red-500 mt-0.5 text-xs"></i>
+                                            <div class="flex-1">
+                                                <p class="text-xs font-semibold text-slate-800" x-text="alert.title"></p>
+                                                <p class="text-[11px] text-slate-500" x-text="alert.location + ' - ' + alert.time"></p>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </template>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- User Avatar -->
+                    <div class="flex items-center space-x-2 pl-2 border-l border-slate-200">
+                        <div class="w-8 h-8 rounded-full bg-brand-500 text-white flex items-center justify-center font-bold text-xs shadow">
+                            JM
+                        </div>
+                        <div class="hidden lg:block text-left text-xs">
+                            <p class="font-semibold text-slate-700 leading-tight">Ing. José M. Silva</p>
+                            <p class="text-[10px] text-slate-400">Director de Mantenimiento</p>
+                        </div>
+                    </div>
+
+                </div>
+            </header>
+
+            <!-- Toast Notification Container -->
+            <div x-show="toast.visible" x-cloak x-transition class="fixed bottom-5 right-5 z-50 bg-slate-900 text-white px-4 py-3 rounded-xl shadow-2xl flex items-center space-x-3 border-l-4" :class="toast.type === 'danger' ? 'border-red-500' : 'border-emerald-500'">
+                <i :class="toast.type === 'danger' ? 'fa-circle-xmark text-red-400' : 'fa-circle-check text-emerald-400'" class="fa-solid text-lg"></i>
+                <div>
+                    <p class="text-xs font-semibold" x-text="toast.title"></p>
+                    <p class="text-[11px] text-slate-300" x-text="toast.message"></p>
+                </div>
+            </div>
+
+            <!-- Mobile Navigation Overlay -->
+            <div x-show="mobileNavOpen" x-cloak class="md:hidden fixed inset-0 bg-slate-900/60 z-40 backdrop-blur-sm" @click="mobileNavOpen = false"></div>
+
+            <!-- Page Views Container -->
+            <main class="flex-1 overflow-y-auto bg-slate-50 p-4 md:p-6 custom-scrollbar">
+
+                <!-- VIEW 1: DASHBOARD -->
+                <div x-show="currentTab === 'dashboard'" space-y-6>
+                    
+                    <!-- Welcome Header & Summary -->
+                    <div class="bg-gradient-to-r from-brand-900 via-brand-800 to-brand-950 rounded-2xl p-6 text-white shadow-lg relative overflow-hidden mb-6">
+                        <div class="absolute -right-10 -bottom-10 opacity-10 text-white text-9xl">
+                            <i class="fa-solid fa-gears"></i>
+                        </div>
+                        <div class="relative z-10">
+                            <div class="flex flex-col md:flex-row md:items-center justify-between gap-4">
+                                <div>
+                                    <span class="bg-gold-500/20 text-gold-400 border border-gold-500/30 text-[11px] font-semibold px-2.5 py-1 rounded-full uppercase tracking-wider">
+                                        Tablero de Confiabilidad
+                                    </span>
+                                    <h2 class="text-2xl font-bold mt-2">Monitoreo Centralizado de Equipos</h2>
+                                    <p class="text-slate-300 text-xs md:text-sm mt-1 max-w-2xl">
+                                        Supervisión continua de climatización, refrigeración, lavandería e infraestructura en los centros.
+                                    </p>
+                                </div>
+                                <div class="bg-white/10 backdrop-blur-md px-4 py-3 rounded-xl border border-white/10 flex items-center space-x-4">
+                                    <div>
+                                        <p class="text-[10px] text-slate-300 uppercase">Salud del Parque de Equipos</p>
+                                        <p class="text-xl font-bold text-emerald-400">97.4% <span class="text-xs text-slate-300 font-normal">Operativo</span></p>
+                                    </div>
+                                    <div class="w-10 h-10 rounded-full bg-emerald-500/20 text-emerald-400 flex items-center justify-center font-bold">
+                                        <i class="fa-solid fa-heart-pulse"></i>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Metrics Cards Grid -->
+                    <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
+                        
+                        <!-- Metric 1: Total Equipos -->
+                        <div class="bg-white rounded-xl p-4 border border-slate-200 shadow-sm hover:shadow-md transition-shadow">
+                            <div class="flex items-center justify-between">
+                                <span class="text-xs font-semibold text-slate-500 uppercase tracking-wider">Equipos Registrados</span>
+                                <div class="w-9 h-9 rounded-lg bg-blue-50 text-blue-600 flex items-center justify-center">
+                                    <i class="fa-solid fa-cubes text-sm"></i>
+                                </div>
+                            </div>
+                            <div class="mt-3 flex items-baseline justify-between">
+                                <p class="text-2xl font-bold text-slate-800" x-text="filteredAssets.length"></p>
+                                <span class="text-[11px] text-slate-500">100% Catastrado</span>
+                            </div>
+                            <div class="mt-2 w-full bg-slate-100 h-1.5 rounded-full overflow-hidden">
+                                <div class="bg-blue-600 h-full rounded-full" style="width: 100%"></div>
+                            </div>
+                        </div>
+
+                        <!-- Metric 2: Preventivos a Tiempo -->
+                        <div class="bg-white rounded-xl p-4 border border-slate-200 shadow-sm hover:shadow-md transition-shadow">
+                            <div class="flex items-center justify-between">
+                                <span class="text-xs font-semibold text-slate-500 uppercase tracking-wider">Cumplimiento PM</span>
+                                <div class="w-9 h-9 rounded-lg bg-emerald-50 text-emerald-600 flex items-center justify-center">
+                                    <i class="fa-solid fa-check-double text-sm"></i>
+                                </div>
+                            </div>
+                            <div class="mt-3 flex items-baseline justify-between">
+                                <p class="text-2xl font-bold text-slate-800">94.8%</p>
+                                <span class="text-[11px] text-emerald-600 font-semibold"><i class="fa-solid fa-arrow-up"></i> +2.3% vs mes anterior</span>
+                            </div>
+                            <div class="mt-2 w-full bg-slate-100 h-1.5 rounded-full overflow-hidden">
+                                <div class="bg-emerald-500 h-full rounded-full" style="width: 94.8%"></div>
+                            </div>
+                        </div>
+
+                        <!-- Metric 3: MTBF (Mean Time Between Failures) -->
+                        <div class="bg-white rounded-xl p-4 border border-slate-200 shadow-sm hover:shadow-md transition-shadow">
+                            <div class="flex items-center justify-between">
+                                <span class="text-xs font-semibold text-slate-500 uppercase tracking-wider">MTBF Promedio</span>
+                                <div class="w-9 h-9 rounded-lg bg-purple-50 text-purple-600 flex items-center justify-center">
+                                    <i class="fa-solid fa-clock-rotate-left text-sm"></i>
+                                </div>
+                            </div>
+                            <div class="mt-3 flex items-baseline justify-between">
+                                <p class="text-2xl font-bold text-slate-800">740 Hrs</p>
+                                <span class="text-[11px] text-slate-500">Tiempo Medio entre Fallas</span>
+                            </div>
+                            <div class="mt-2 w-full bg-slate-100 h-1.5 rounded-full overflow-hidden">
+                                <div class="bg-purple-500 h-full rounded-full" style="width: 82%"></div>
+                            </div>
+                        </div>
+
+                        <!-- Metric 4: Órdenes Abiertas -->
+                        <div class="bg-white rounded-xl p-4 border border-slate-200 shadow-sm hover:shadow-md transition-shadow">
+                            <div class="flex items-center justify-between">
+                                <span class="text-xs font-semibold text-slate-500 uppercase tracking-wider">OTs Activas</span>
+                                <div class="w-9 h-9 rounded-lg bg-amber-50 text-amber-600 flex items-center justify-center">
+                                    <i class="fa-solid fa-wrench text-sm"></i>
+                                </div>
+                            </div>
+                            <div class="mt-3 flex items-baseline justify-between">
+                                <p class="text-2xl font-bold text-slate-800" x-text="workOrders.filter(o => o.status !== 'Completada').length"></p>
+                                <span class="text-[11px] text-amber-600 font-semibold" x-text="workOrders.filter(o => o.priority === 'Alta' && o.status !== 'Completada').length + ' Prioridad Alta'"></span>
+                            </div>
+                            <div class="mt-2 w-full bg-slate-100 h-1.5 rounded-full overflow-hidden">
+                                <div class="bg-amber-500 h-full rounded-full" style="width: 35%"></div>
+                            </div>
+                        </div>
+
+                    </div>
+
+                    <!-- Charts Section -->
+                    <div class="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-6">
+                        
+                        <!-- Main Bar Chart: Costos por Familia de Equipos -->
+                        <div class="lg:col-span-2 bg-white rounded-2xl p-5 border border-slate-200 shadow-sm">
+                            <div class="flex items-center justify-between mb-4">
+                                <div>
+                                    <h3 class="font-bold text-slate-800 text-sm">Distribución de Gastos de Mantenimiento ($ USD)</h3>
+                                    <p class="text-xs text-slate-500">Comparativa de preventivo vs. correctivo por tipo de equipo</p>
+                                </div>
+                                <span class="text-xs bg-slate-100 text-slate-600 px-2.5 py-1 rounded-lg font-medium">Año 2026</span>
+                            </div>
+                            <div class="h-64 relative">
+                                <canvas id="expensesChart"></canvas>
+                            </div>
+                        </div>
+
+                        <!-- Doughnut Chart: Estado Operativo -->
+                        <div class="bg-white rounded-2xl p-5 border border-slate-200 shadow-sm">
+                            <div class="mb-4">
+                                <h3 class="font-bold text-slate-800 text-sm">Estado de Equipos</h3>
+                                <p class="text-xs text-slate-500">Distribución por condición de operación</p>
+                            </div>
+                            <div class="h-48 relative flex items-center justify-center">
+                                <canvas id="statusChart"></canvas>
+                            </div>
+                            <div class="mt-4 pt-3 border-t border-slate-100 grid grid-cols-2 gap-2 text-xs">
+                                <div class="flex items-center space-x-2">
+                                    <span class="w-2.5 h-2.5 rounded-full bg-emerald-500"></span>
+                                    <span class="text-slate-600">Operativo: <strong class="text-slate-800" x-text="assets.filter(a=>a.status==='Operativo').length"></strong></span>
+                                </div>
+                                <div class="flex items-center space-x-2">
+                                    <span class="w-2.5 h-2.5 rounded-full bg-amber-500"></span>
+                                    <span class="text-slate-600">En Mant.: <strong class="text-slate-800" x-text="assets.filter(a=>a.status==='En Mantenimiento').length"></strong></span>
+                                </div>
+                                <div class="flex items-center space-x-2">
+                                    <span class="w-2.5 h-2.5 rounded-full bg-red-500"></span>
+                                    <span class="text-slate-600">En Falla: <strong class="text-slate-800" x-text="assets.filter(a=>a.status==='En Falla').length"></strong></span>
+                                </div>
+                                <div class="flex items-center space-x-2">
+                                    <span class="w-2.5 h-2.5 rounded-full bg-blue-500"></span>
+                                    <span class="text-slate-600">Reemplazo: <strong class="text-slate-800">2</strong></span>
+                                </div>
+                            </div>
+                        </div>
+
+                    </div>
+
+                    <!-- Critical Assets Quick Table -->
+                    <div class="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
+                        <div class="p-5 border-b border-slate-100 flex items-center justify-between">
+                            <div>
+                                <h3 class="font-bold text-slate-800 text-sm">Equipos Críticos de Mayor Atención</h3>
+                                <p class="text-xs text-slate-500">Aires Centrales, Refrigeración Industrial y Plantas Eléctricas</p>
+                            </div>
+                            <button @click="currentTab = 'inventory'" class="text-xs font-semibold text-brand-600 hover:text-brand-800 transition-colors">
+                                Ver todo el inventario &rarr;
+                            </button>
+                        </div>
+                        <div class="overflow-x-auto">
+                            <table class="w-full text-left text-xs">
+                                <thead class="bg-slate-50 text-slate-500 uppercase tracking-wider font-semibold border-b border-slate-200">
+                                    <tr>
+                                        <th class="p-3.5">Código / Equipo</th>
+                                        <th class="p-3.5">Categoría</th>
+                                        <th class="p-3.5">Ubicación / Centro</th>
+                                        <th class="p-3.5">Último Mantenimiento</th>
+                                        <th class="p-3.5">Próximo Preventivo</th>
+                                        <th class="p-3.5 text-center">Estado</th>
+                                        <th class="p-3.5 text-right">Acción</th>
+                                    </tr>
+                                </thead>
+                                <tbody class="divide-y divide-slate-100">
+                                    <template x-for="asset in filteredAssets.slice(0, 5)" :key="asset.id">
+                                        <tr class="hover:bg-slate-50 transition-colors">
+                                            <td class="p-3.5">
+                                                <div class="font-bold text-slate-800" x-text="asset.name"></div>
+                                                <div class="text-[10px] text-slate-400 font-mono" x-text="asset.code + ' | S/N: ' + asset.serial"></div>
+                                            </td>
+                                            <td class="p-3.5">
+                                                <span class="px-2 py-0.5 rounded-full text-[10px] font-medium bg-slate-100 text-slate-700" x-text="asset.category"></span>
+                                            </td>
+                                            <td class="p-3.5 text-slate-600 font-medium" x-text="asset.location"></td>
+                                            <td class="p-3.5 text-slate-500" x-text="asset.lastMaintenance"></td>
+                                            <td class="p-3.5">
+                                                <span class="font-semibold" :class="isNear(asset.nextMaintenance) ? 'text-amber-600 font-bold' : 'text-slate-600'" x-text="asset.nextMaintenance"></span>
+                                            </td>
+                                            <td class="p-3.5 text-center">
+                                                <span class="px-2.5 py-1 rounded-full text-[10px] font-bold"
+                                                    :class="{
+                                                        'bg-emerald-100 text-emerald-700': asset.status === 'Operativo',
+                                                        'bg-amber-100 text-amber-700': asset.status === 'En Mantenimiento',
+                                                        'bg-red-100 text-red-700': asset.status === 'En Falla'
+                                                    }" x-text="asset.status">
+                                                </span>
+                                            </td>
+                                            <td class="p-3.5 text-right">
+                                                <button @click="openAssetModal(asset)" class="text-brand-600 hover:text-brand-800 font-semibold text-xs bg-brand-50 hover:bg-brand-100 px-2.5 py-1 rounded-lg transition-colors">
+                                                    Ver Ficha
+                                                </button>
+                                            </td>
+                                        </tr>
+                                    </template>
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+
+                </div>
+
+                <!-- VIEW 2: INVENTORY -->
+                <div x-show="currentTab === 'inventory'" space-y-6 x-cloak>
+                    
+                    <!-- Search & Filter Controls -->
+                    <div class="bg-white rounded-2xl p-4 border border-slate-200 shadow-sm flex flex-col md:flex-row items-center justify-between gap-4 mb-6">
+                        
+                        <!-- Search Box -->
+                        <div class="relative w-full md:w-80">
+                            <i class="fa-solid fa-magnifying-glass absolute left-3 top-3 text-slate-400 text-sm"></i>
+                            <input type="text" x-model="searchQuery" placeholder="Buscar por código, serie, modelo..." class="w-full pl-9 pr-4 py-2 bg-slate-50 border border-slate-200 rounded-xl text-sm focus:outline-none focus:border-brand-500 transition-colors">
+                        </div>
+
+                        <!-- Category Filters -->
+                        <div class="flex items-center space-x-1.5 overflow-x-auto w-full md:w-auto pb-2 md:pb-0 custom-scrollbar">
+                            <button @click="categoryFilter = 'ALL'" :class="categoryFilter === 'ALL' ? 'bg-brand-900 text-white' : 'bg-slate-100 text-slate-600 hover:bg-slate-200'" class="px-3 py-1.5 rounded-lg text-xs font-semibold whitespace-nowrap transition-colors">
+                                Todos
+                            </button>
+                            <button @click="categoryFilter = 'Climatización'" :class="categoryFilter === 'Climatización' ? 'bg-brand-900 text-white' : 'bg-slate-100 text-slate-600 hover:bg-slate-200'" class="px-3 py-1.5 rounded-lg text-xs font-semibold whitespace-nowrap transition-colors">
+                                ❄️ Climatización (A/A)
+                            </button>
+                            <button @click="categoryFilter = 'Refrigeración'" :class="categoryFilter === 'Refrigeración' ? 'bg-brand-900 text-white' : 'bg-slate-100 text-slate-600 hover:bg-slate-200'" class="px-3 py-1.5 rounded-lg text-xs font-semibold whitespace-nowrap transition-colors">
+                                🧊 Refrigeración
+                            </button>
+                            <button @click="categoryFilter = 'Lavandería'" :class="categoryFilter === 'Lavandería' ? 'bg-brand-900 text-white' : 'bg-slate-100 text-slate-600 hover:bg-slate-200'" class="px-3 py-1.5 rounded-lg text-xs font-semibold whitespace-nowrap transition-colors">
+                                🧺 Lavandería
+                            </button>
+                            <button @click="categoryFilter = 'Cocina'" :class="categoryFilter === 'Cocina' ? 'bg-brand-900 text-white' : 'bg-slate-100 text-slate-600 hover:bg-slate-200'" class="px-3 py-1.5 rounded-lg text-xs font-semibold whitespace-nowrap transition-colors">
+                                🍳 Cocina
+                            </button>
+                            <button @click="categoryFilter = 'Servicios'" :class="categoryFilter === 'Servicios' ? 'bg-brand-900 text-white' : 'bg-slate-100 text-slate-600 hover:bg-slate-200'" class="px-3 py-1.5 rounded-lg text-xs font-semibold whitespace-nowrap transition-colors">
+                                ⚡ Generadores/Bombas
+                            </button>
+                        </div>
+
+                        <!-- Add Equipment Button -->
+                        <button @click="openAddAssetModal = true" class="w-full md:w-auto bg-emerald-600 hover:bg-emerald-700 text-white px-4 py-2 rounded-xl text-xs font-bold flex items-center justify-center space-x-2 shadow-sm transition-colors">
+                            <i class="fa-solid fa-plus"></i>
+                            <span>+ Nuevo Equipo</span>
+                        </button>
+                    </div>
+
+                    <!-- Assets Grid Cards -->
+                    <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
+                        <template x-for="asset in filteredAssets" :key="asset.id">
+                            <div class="bg-white rounded-2xl border border-slate-200 p-5 shadow-sm hover:shadow-md transition-all flex flex-col justify-between">
+                                
+                                <div>
+                                    <!-- Header Badge & Status -->
+                                    <div class="flex items-center justify-between mb-3">
+                                        <span class="text-[10px] font-mono font-bold px-2.5 py-1 bg-slate-100 text-slate-700 rounded-md" x-text="asset.code"></span>
+                                        <span class="px-2.5 py-1 rounded-full text-[10px] font-bold"
+                                            :class="{
+                                                'bg-emerald-100 text-emerald-700': asset.status === 'Operativo',
+                                                'bg-amber-100 text-amber-700': asset.status === 'En Mantenimiento',
+                                                'bg-red-100 text-red-700': asset.status === 'En Falla'
+                                            }" x-text="asset.status">
+                                        </span>
+                                    </div>
+
+                                    <!-- Asset Title & Model -->
+                                    <h3 class="font-bold text-slate-800 text-base leading-snug" x-text="asset.name"></h3>
+                                    <p class="text-xs text-slate-500 mt-1" x-text="asset.brand + ' - Mod. ' + asset.model"></p>
+
+                                    <!-- Detail Pills -->
+                                    <div class="mt-4 space-y-2 text-xs">
+                                        <div class="flex items-center justify-between text-slate-600">
+                                            <span class="text-slate-400"><i class="fa-solid fa-location-dot w-4 text-center"></i> Ubicación:</span>
+                                            <span class="font-medium text-slate-800" x-text="asset.location"></span>
+                                        </div>
+                                        <div class="flex items-center justify-between text-slate-600">
+                                            <span class="text-slate-400"><i class="fa-solid fa-microchip w-4 text-center"></i> Especificación:</span>
+                                            <span class="font-medium text-slate-800" x-text="asset.specs"></span>
+                                        </div>
+                                        <div class="flex items-center justify-between text-slate-600">
+                                            <span class="text-slate-400"><i class="fa-solid fa-clock-rotate-left w-4 text-center"></i> MTBF Estimado:</span>
+                                            <span class="font-semibold text-purple-600" x-text="asset.mtbf + ' hrs'"></span>
+                                        </div>
+                                    </div>
+                                </div>
+
+                                <!-- Footer Action Buttons -->
+                                <div class="mt-5 pt-3 border-t border-slate-100 flex items-center justify-between">
+                                    <div class="text-[10px] text-slate-400">
+                                        Próx. PM: <strong class="text-slate-600" x-text="asset.nextMaintenance"></strong>
+                                    </div>
+                                    <button @click="openAssetModal(asset)" class="text-xs bg-slate-100 hover:bg-brand-50 hover:text-brand-700 font-semibold px-3 py-1.5 rounded-lg text-slate-700 transition-colors">
+                                        <i class="fa-solid fa-qrcode mr-1"></i> Ver Hoja de Vida
+                                    </button>
+                                </div>
+
+                            </div>
+                        </template>
+                    </div>
+
+                </div>
+
+                <!-- VIEW 3: PREVENTIVE MAINTENANCE -->
+                <div x-show="currentTab === 'preventive'" space-y-6 x-cloak>
+                    
+                    <div class="bg-white rounded-2xl p-5 border border-slate-200 shadow-sm mb-6 flex flex-col md:flex-row md:items-center justify-between gap-4">
+                        <div>
+                            <h2 class="font-bold text-slate-800 text-lg">Programa de Mantenimiento Preventivo</h2>
+                            <p class="text-xs text-slate-500">Rutinas periódicas de conservación para evitar fallas imprevistas</p>
+                        </div>
+                        <div class="flex items-center space-x-2">
+                            <span class="text-xs bg-emerald-50 text-emerald-700 border border-emerald-200 px-3 py-1.5 rounded-lg font-semibold">
+                                <i class="fa-solid fa-calendar-day mr-1"></i> Octubre 2026
+                            </span>
+                        </div>
+                    </div>
+
+                    <!-- Preventive Schedule Table -->
+                    <div class="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
+                        <div class="overflow-x-auto">
+                            <table class="w-full text-left text-xs">
+                                <thead class="bg-slate-50 text-slate-500 uppercase tracking-wider font-semibold border-b border-slate-200">
+                                    <tr>
+                                        <th class="p-3.5">Rutina / Tarea</th>
+                                        <th class="p-3.5">Equipo Asociado</th>
+                                        <th class="p-3.5">Centro</th>
+                                        <th class="p-3.5">Frecuencia</th>
+                                        <th class="p-3.5">Fecha Programada</th>
+                                        <th class="p-3.5">Responsable</th>
+                                        <th class="p-3.5 text-center">Acción</th>
+                                    </tr>
+                                </thead>
+                                <tbody class="divide-y divide-slate-100">
+                                    <template x-for="pm in pmSchedules" :key="pm.id">
+                                        <tr class="hover:bg-slate-50 transition-colors">
+                                            <td class="p-3.5">
+                                                <div class="font-bold text-slate-800" x-text="pm.title"></div>
+                                                <div class="text-[10px] text-slate-400" x-text="pm.taskCount + ' puntos de inspección digital'"></div>
+                                            </td>
+                                            <td class="p-3.5 font-medium text-slate-700" x-text="pm.assetName"></td>
+                                            <td class="p-3.5 text-slate-600" x-text="pm.center"></td>
+                                            <td class="p-3.5">
+                                                <span class="px-2 py-0.5 rounded-full text-[10px] font-bold bg-blue-50 text-blue-700" x-text="pm.frequency"></span>
+                                            </td>
+                                            <td class="p-3.5 font-semibold text-slate-800" x-text="pm.scheduledDate"></td>
+                                            <td class="p-3.5 text-slate-600" x-text="pm.technician"></td>
+                                            <td class="p-3.5 text-center">
+                                                <button @click="startChecklist(pm)" class="bg-emerald-600 hover:bg-emerald-700 text-white font-semibold text-xs px-3 py-1.5 rounded-lg shadow-sm transition-colors flex items-center justify-center space-x-1.5 mx-auto">
+                                                    <i class="fa-solid fa-list-check"></i>
+                                                    <span>Ejecutar Checklist</span>
+                                                </button>
+                                            </td>
+                                        </tr>
+                                    </template>
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+
+                </div>
+
+                <!-- VIEW 4: WORK ORDERS (KANBAN) -->
+                <div x-show="currentTab === 'workorders'" space-y-6 x-cloak>
+                    
+                    <div class="bg-white rounded-2xl p-5 border border-slate-200 shadow-sm mb-6 flex items-center justify-between">
+                        <div>
+                            <h2 class="font-bold text-slate-800 text-lg">Órdenes de Trabajo & Correctivos</h2>
+                            <p class="text-xs text-slate-500">Gestión de flujo desde reporte hasta cierre con costo técnico</p>
+                        </div>
+                        <button @click="openReportModal = true" class="bg-brand-600 hover:bg-brand-700 text-white px-3.5 py-1.5 rounded-xl text-xs font-bold shadow-sm transition-colors">
+                            + Crear Nueva OT
+                        </button>
+                    </div>
+
+                    <!-- Kanban Columns Grid -->
+                    <div class="grid grid-cols-1 md:grid-cols-4 gap-4">
+                        
+                        <!-- Col 1: Solicitadas -->
+                        <div class="bg-slate-200/60 rounded-2xl p-3 border border-slate-200">
+                            <div class="flex items-center justify-between pb-3 border-b border-slate-300 px-1">
+                                <span class="font-bold text-xs uppercase text-slate-700">1. Solicitadas</span>
+                                <span class="bg-slate-300 text-slate-800 text-[10px] font-bold px-2 py-0.5 rounded-full" x-text="workOrders.filter(o=>o.status==='Solicitada').length"></span>
+                            </div>
+                            <div class="mt-3 space-y-3">
+                                <template x-for="order in workOrders.filter(o=>o.status==='Solicitada')" :key="order.id">
+                                    <div class="bg-white p-4 rounded-xl border border-slate-200 shadow-sm space-y-2">
+                                        <div class="flex items-center justify-between text-[10px]">
+                                            <span class="font-mono text-slate-400" x-text="order.code"></span>
+                                            <span class="px-2 py-0.5 rounded text-red-600 bg-red-50 font-bold" x-text="order.priority"></span>
+                                        </div>
+                                        <h4 class="font-bold text-slate-800 text-xs" x-text="order.title"></h4>
+                                        <p class="text-[11px] text-slate-500" x-text="order.assetName + ' - ' + order.center"></p>
+                                        <div class="pt-2 border-t border-slate-100 flex justify-between items-center text-[10px]">
+                                            <span class="text-slate-400" x-text="order.date"></span>
+                                            <button @click="moveOrderStatus(order, 'Programada')" class="text-brand-600 hover:underline font-bold">Aprobar &rarr;</button>
+                                        </div>
+                                    </div>
+                                </template>
+                            </div>
+                        </div>
+
+                        <!-- Col 2: Programadas -->
+                        <div class="bg-slate-200/60 rounded-2xl p-3 border border-slate-200">
+                            <div class="flex items-center justify-between pb-3 border-b border-slate-300 px-1">
+                                <span class="font-bold text-xs uppercase text-slate-700">2. Programadas</span>
+                                <span class="bg-slate-300 text-slate-800 text-[10px] font-bold px-2 py-0.5 rounded-full" x-text="workOrders.filter(o=>o.status==='Programada').length"></span>
+                            </div>
+                            <div class="mt-3 space-y-3">
+                                <template x-for="order in workOrders.filter(o=>o.status==='Programada')" :key="order.id">
+                                    <div class="bg-white p-4 rounded-xl border border-slate-200 shadow-sm space-y-2">
+                                        <div class="flex items-center justify-between text-[10px]">
+                                            <span class="font-mono text-slate-400" x-text="order.code"></span>
+                                            <span class="px-2 py-0.5 rounded text-amber-600 bg-amber-50 font-bold" x-text="order.priority"></span>
+                                        </div>
+                                        <h4 class="font-bold text-slate-800 text-xs" x-text="order.title"></h4>
+                                        <p class="text-[11px] text-slate-500" x-text="order.assetName"></p>
+                                        <div class="pt-2 border-t border-slate-100 flex justify-between items-center text-[10px]">
+                                            <span class="text-slate-500 font-semibold" x-text="'Tec: ' + order.technician"></span>
+                                            <button @click="moveOrderStatus(order, 'En Proceso')" class="text-brand-600 hover:underline font-bold">Iniciar &rarr;</button>
+                                        </div>
+                                    </div>
+                                </template>
+                            </div>
+                        </div>
+
+                        <!-- Col 3: En Proceso -->
+                        <div class="bg-slate-200/60 rounded-2xl p-3 border border-slate-200">
+                            <div class="flex items-center justify-between pb-3 border-b border-slate-300 px-1">
+                                <span class="font-bold text-xs uppercase text-amber-700">3. En Proceso</span>
+                                <span class="bg-amber-200 text-amber-800 text-[10px] font-bold px-2 py-0.5 rounded-full" x-text="workOrders.filter(o=>o.status==='En Proceso').length"></span>
+                            </div>
+                            <div class="mt-3 space-y-3">
+                                <template x-for="order in workOrders.filter(o=>o.status==='En Proceso')" :key="order.id">
+                                    <div class="bg-white p-4 rounded-xl border-l-4 border-amber-500 shadow-sm space-y-2">
+                                        <div class="flex items-center justify-between text-[10px]">
+                                            <span class="font-mono text-slate-400" x-text="order.code"></span>
+                                            <span class="animate-pulse bg-amber-100 text-amber-700 px-2 py-0.5 rounded font-bold">En Ejecución</span>
+                                        </div>
+                                        <h4 class="font-bold text-slate-800 text-xs" x-text="order.title"></h4>
+                                        <p class="text-[11px] text-slate-500" x-text="order.assetName"></p>
+                                        <div class="pt-2 border-t border-slate-100 flex justify-between items-center text-[10px]">
+                                            <span class="text-slate-500" x-text="'Est. Costo: $' + order.cost"></span>
+                                            <button @click="moveOrderStatus(order, 'Completada')" class="bg-emerald-600 hover:bg-emerald-700 text-white px-2 py-1 rounded font-bold">Finalizar &check;</button>
+                                        </div>
+                                    </div>
+                                </template>
+                            </div>
+                        </div>
+
+                        <!-- Col 4: Completadas -->
+                        <div class="bg-slate-200/60 rounded-2xl p-3 border border-slate-200">
+                            <div class="flex items-center justify-between pb-3 border-b border-slate-300 px-1">
+                                <span class="font-bold text-xs uppercase text-emerald-700">4. Completadas</span>
+                                <span class="bg-emerald-200 text-emerald-800 text-[10px] font-bold px-2 py-0.5 rounded-full" x-text="workOrders.filter(o=>o.status==='Completada').length"></span>
+                            </div>
+                            <div class="mt-3 space-y-3 max-h-96 overflow-y-auto custom-scrollbar">
+                                <template x-for="order in workOrders.filter(o=>o.status==='Completada')" :key="order.id">
+                                    <div class="bg-white p-4 rounded-xl border border-slate-200 opacity-80 space-y-2">
+                                        <div class="flex items-center justify-between text-[10px]">
+                                            <span class="font-mono text-slate-400" x-text="order.code"></span>
+                                            <span class="text-emerald-600 font-bold"><i class="fa-solid fa-circle-check"></i> CERRADA</span>
+                                        </div>
+                                        <h4 class="font-bold text-slate-700 text-xs line-through" x-text="order.title"></h4>
+                                        <p class="text-[11px] text-slate-400" x-text="order.assetName"></p>
+                                        <div class="pt-1 text-[10px] text-slate-500 flex justify-between">
+                                            <span>Costo Total:</span>
+                                            <strong class="text-slate-800" x-text="'$' + order.cost"></strong>
+                                        </div>
+                                    </div>
+                                </template>
+                            </div>
+                        </div>
+
+                    </div>
+
+                </div>
+
+                <!-- VIEW 5: SUPPLIERS & CONTRACTORS (NUEVA SECCIÓN REQUERIDA) -->
+                <div x-show="currentTab === 'suppliers'" space-y-6 x-cloak>
+                    
+                    <!-- View Header -->
+                    <div class="bg-white rounded-2xl p-5 border border-slate-200 shadow-sm mb-6 flex flex-col md:flex-row md:items-center justify-between gap-4">
+                        <div>
+                            <div class="flex items-center space-x-2">
+                                <span class="bg-orange-100 text-orange-700 text-xs font-bold px-2.5 py-1 rounded-md uppercase">Gestión de Terceros</span>
+                                <h2 class="font-bold text-slate-800 text-lg">Directorio de Proveedores y Contratistas</h2>
+                            </div>
+                            <p class="text-xs text-slate-500 mt-1">
+                                Histórico completo de empresas prestadoras de servicio, fechas de intervención, costos cobrados y contactos de referencia.
+                            </p>
+                        </div>
+                        
+                        <button @click="openAddSupplierModal = true" class="bg-orange-600 hover:bg-orange-700 text-white px-4 py-2 rounded-xl text-xs font-bold flex items-center justify-center space-x-2 shadow-sm transition-colors">
+                            <i class="fa-solid fa-plus"></i>
+                            <span>+ Registrar Proveedor</span>
+                        </button>
+                    </div>
+
+                    <!-- Summary Stats Cards -->
+                    <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
+                        
+                        <div class="bg-white rounded-xl p-4 border border-slate-200 shadow-sm">
+                            <span class="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Proveedores Registrados</span>
+                            <div class="mt-2 flex items-baseline justify-between">
+                                <p class="text-2xl font-bold text-slate-800" x-text="suppliers.length"></p>
+                                <span class="text-xs text-emerald-600 font-semibold">&check; 100% Homologados</span>
+                            </div>
+                        </div>
+
+                        <div class="bg-white rounded-xl p-4 border border-slate-200 shadow-sm">
+                            <span class="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Gasto Total en Contratistas</span>
+                            <div class="mt-2 flex items-baseline justify-between">
+                                <p class="text-2xl font-bold text-slate-800" x-text="'$' + getTotalSuppliersSpend().toLocaleString()"></p>
+                                <span class="text-xs text-slate-500 font-medium">USD Acumulado</span>
+                            </div>
+                        </div>
+
+                        <div class="bg-white rounded-xl p-4 border border-slate-200 shadow-sm">
+                            <span class="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Intervenciones Registradas</span>
+                            <div class="mt-2 flex items-baseline justify-between">
+                                <p class="text-2xl font-bold text-slate-800" x-text="getTotalInterventionsCount()"></p>
+                                <span class="text-xs text-blue-600 font-semibold">Facturadas y Auditadas</span>
+                            </div>
+                        </div>
+
+                        <div class="bg-white rounded-xl p-4 border border-slate-200 shadow-sm">
+                            <span class="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Calificación Promedio</span>
+                            <div class="mt-2 flex items-baseline justify-between">
+                                <p class="text-2xl font-bold text-amber-500">4.8 / 5.0 ★</p>
+                                <span class="text-xs text-slate-500">Evaluación Interna</span>
+                            </div>
+                        </div>
+
+                    </div>
+
+                    <!-- Search and Specialty Filter -->
+                    <div class="bg-white rounded-2xl p-4 border border-slate-200 shadow-sm flex flex-col md:flex-row items-center justify-between gap-4 mb-6">
+                        <div class="relative w-full md:w-80">
+                            <i class="fa-solid fa-magnifying-glass absolute left-3 top-3 text-slate-400 text-sm"></i>
+                            <input type="text" x-model="supplierSearch" placeholder="Buscar proveedor, contacto o especialidad..." class="w-full pl-9 pr-4 py-2 bg-slate-50 border border-slate-200 rounded-xl text-sm focus:outline-none focus:border-orange-500 transition-colors">
+                        </div>
+
+                        <div class="flex items-center space-x-1.5 overflow-x-auto w-full md:w-auto pb-2 md:pb-0 custom-scrollbar">
+                            <button @click="supplierFilter = 'ALL'" :class="supplierFilter === 'ALL' ? 'bg-orange-600 text-white' : 'bg-slate-100 text-slate-600 hover:bg-slate-200'" class="px-3 py-1.5 rounded-lg text-xs font-semibold whitespace-nowrap transition-colors">
+                                Todos
+                            </button>
+                            <button @click="supplierFilter = 'Climatización'" :class="supplierFilter === 'Climatización' ? 'bg-orange-600 text-white' : 'bg-slate-100 text-slate-600 hover:bg-slate-200'" class="px-3 py-1.5 rounded-lg text-xs font-semibold whitespace-nowrap transition-colors">
+                                Climatización / Chillers
+                            </button>
+                            <button @click="supplierFilter = 'Refrigeración'" :class="supplierFilter === 'Refrigeración' ? 'bg-orange-600 text-white' : 'bg-slate-100 text-slate-600 hover:bg-slate-200'" class="px-3 py-1.5 rounded-lg text-xs font-semibold whitespace-nowrap transition-colors">
+                                Refrigeración
+                            </button>
+                            <button @click="supplierFilter = 'Lavandería'" :class="supplierFilter === 'Lavandería' ? 'bg-orange-600 text-white' : 'bg-slate-100 text-slate-600 hover:bg-slate-200'" class="px-3 py-1.5 rounded-lg text-xs font-semibold whitespace-nowrap transition-colors">
+                                Lavandería
+                            </button>
+                            <button @click="supplierFilter = 'Generadores'" :class="supplierFilter === 'Generadores' ? 'bg-orange-600 text-white' : 'bg-slate-100 text-slate-600 hover:bg-slate-200'" class="px-3 py-1.5 rounded-lg text-xs font-semibold whitespace-nowrap transition-colors">
+                                Generadores / Plantas
+                            </button>
+                        </div>
+                    </div>
+
+                    <!-- Suppliers Cards Grid -->
+                    <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5 mb-8">
+                        <template x-for="supplier in filteredSuppliers" :key="supplier.id">
+                            <div class="bg-white rounded-2xl border border-slate-200 p-5 shadow-sm hover:shadow-md transition-all flex flex-col justify-between">
+                                <div>
+                                    <!-- Top Row: Badge & Rating -->
+                                    <div class="flex items-center justify-between mb-2">
+                                        <span class="px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-emerald-100 text-emerald-700" x-text="supplier.status"></span>
+                                        <div class="flex items-center space-x-1 text-amber-500 text-xs font-bold">
+                                            <i class="fa-solid fa-star"></i>
+                                            <span x-text="supplier.rating.toFixed(1)"></span>
+                                        </div>
+                                    </div>
+
+                                    <!-- Supplier Name and Specialty -->
+                                    <h3 class="font-bold text-slate-800 text-base leading-snug" x-text="supplier.name"></h3>
+                                    <span class="inline-block mt-1 text-[11px] font-semibold text-brand-600 bg-brand-50 px-2 py-0.5 rounded-md" x-text="supplier.specialty"></span>
+
+                                    <!-- Contact details -->
+                                    <div class="mt-4 space-y-2 text-xs border-t border-slate-100 pt-3">
+                                        <div class="flex items-center text-slate-600">
+                                            <i class="fa-solid fa-user-tie w-5 text-slate-400"></i>
+                                            <span class="font-medium text-slate-800" x-text="supplier.contactPerson"></span>
+                                        </div>
+                                        <div class="flex items-center text-slate-600">
+                                            <i class="fa-solid fa-phone w-5 text-slate-400"></i>
+                                            <span class="font-mono" x-text="supplier.phone"></span>
+                                        </div>
+                                        <div class="flex items-center text-slate-600">
+                                            <i class="fa-solid fa-envelope w-5 text-slate-400"></i>
+                                            <span class="truncate" x-text="supplier.email"></span>
+                                        </div>
+                                        <div class="flex items-center text-slate-600">
+                                            <i class="fa-solid fa-id-card w-5 text-slate-400"></i>
+                                            <span class="font-mono text-slate-500" x-text="'RIF: ' + supplier.taxId"></span>
+                                        </div>
+                                    </div>
+                                </div>
+
+                                <!-- Card Footer Financials -->
+                                <div class="mt-5 pt-3 border-t border-slate-100 space-y-2">
+                                    <div class="flex items-center justify-between text-xs">
+                                        <span class="text-slate-500">Mantenimientos Realizados:</span>
+                                        <strong class="text-slate-800 font-bold" x-text="supplier.history.length + ' Servicios'"></strong>
+                                    </div>
+                                    <div class="flex items-center justify-between text-xs">
+                                        <span class="text-slate-500">Total Cobrado:</span>
+                                        <strong class="text-emerald-600 font-bold" x-text="'$' + supplier.totalSpent.toLocaleString() + ' USD'"></strong>
+                                    </div>
+                                    <div class="flex items-center justify-between text-[11px] text-slate-400">
+                                        <span>Último Servicio:</span>
+                                        <span class="font-semibold text-slate-600" x-text="supplier.lastServiceDate"></span>
+                                    </div>
+
+                                    <button @click="openSupplierModal(supplier)" class="w-full mt-2 bg-slate-100 hover:bg-orange-50 hover:text-orange-700 text-slate-700 font-bold text-xs py-2 rounded-xl transition-colors flex items-center justify-center space-x-1.5">
+                                        <i class="fa-solid fa-receipt"></i>
+                                        <span>Ver Detalle de Mantenimientos & Facturas</span>
+                                    </button>
+                                </div>
+                            </div>
+                        </template>
+                    </div>
+
+                    <!-- Consolidated Intervention History Table -->
+                    <div class="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
+                        <div class="p-5 border-b border-slate-100 flex flex-col md:flex-row md:items-center justify-between gap-2">
+                            <div>
+                                <h3 class="font-bold text-slate-800 text-sm">Histórico Consolidado de Mantenimientos por Contratista</h3>
+                                <p class="text-xs text-slate-500">Registro detallado de fecha, equipo intervenido, tipo de trabajo y monto facturado</p>
+                            </div>
+                            <span class="text-xs bg-slate-100 text-slate-600 px-3 py-1 rounded-lg font-semibold" x-text="getAllInterventions().length + ' Mantenimientos Registrados'"></span>
+                        </div>
+
+                        <div class="overflow-x-auto">
+                            <table class="w-full text-left text-xs">
+                                <thead class="bg-slate-50 text-slate-500 uppercase tracking-wider font-semibold border-b border-slate-200">
+                                    <tr>
+                                        <th class="p-3.5">Fecha</th>
+                                        <th class="p-3.5">Proveedor / Contratista</th>
+                                        <th class="p-3.5">Equipo Intervenido</th>
+                                        <th class="p-3.5">Centro</th>
+                                        <th class="p-3.5">Tipo Trabajo</th>
+                                        <th class="p-3.5">Detalle / FallaAtendida</th>
+                                        <th class="p-3.5">N° Factura</th>
+                                        <th class="p-3.5 text-right">Monto Cobrado</th>
+                                    </tr>
+                                </thead>
+                                <tbody class="divide-y divide-slate-100">
+                                    <template x-for="(item, index) in getAllInterventions()" :key="index">
+                                        <tr class="hover:bg-slate-50 transition-colors">
+                                            <td class="p-3.5 font-mono font-semibold text-slate-700" x-text="item.date"></td>
+                                            <td class="p-3.5">
+                                                <div class="font-bold text-slate-800" x-text="item.supplierName"></div>
+                                                <div class="text-[10px] text-slate-400" x-text="'Contacto: ' + item.contactPerson"></div>
+                                            </td>
+                                            <td class="p-3.5">
+                                                <div class="font-semibold text-slate-800" x-text="item.assetName"></div>
+                                                <div class="text-[10px] font-mono text-slate-400" x-text="item.assetCode"></div>
+                                            </td>
+                                            <td class="p-3.5 text-slate-600 font-medium" x-text="item.center"></td>
+                                            <td class="p-3.5">
+                                                <span class="px-2 py-0.5 rounded-full text-[10px] font-bold"
+                                                    :class="item.type === 'Preventivo' ? 'bg-blue-100 text-blue-700' : 'bg-amber-100 text-amber-700'"
+                                                    x-text="item.type">
+                                                </span>
+                                            </td>
+                                            <td class="p-3.5 text-slate-600 max-w-xs truncate" x-text="item.description" :title="item.description"></td>
+                                            <td class="p-3.5 font-mono text-slate-500" x-text="item.invoice"></td>
+                                            <td class="p-3.5 text-right font-bold text-emerald-600 font-mono text-sm" x-text="'$' + item.cost + ' USD'"></td>
+                                        </tr>
+                                    </template>
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+
+                </div>
+
+                <!-- VIEW 6: TELEMETRY & IOT MONITORING -->
+                <div x-show="currentTab === 'telemetry'" space-y-6 x-cloak>
+                    
+                    <div class="bg-white rounded-2xl p-5 border border-slate-200 shadow-sm mb-6 flex flex-col md:flex-row md:items-center justify-between gap-4">
+                        <div>
+                            <div class="flex items-center space-x-2">
+                                <span class="w-3 h-3 rounded-full bg-emerald-500 animate-ping"></span>
+                                <h2 class="font-bold text-slate-800 text-lg">Monitoreo IoT en Tiempo Real</h2>
+                            </div>
+                            <p class="text-xs text-slate-500">Lecturas de sensores de temperatura, amparaje y vibración en activos críticos</p>
+                        </div>
+                        
+                        <div class="flex items-center space-x-3">
+                            <button @click="triggerSimulatedAlert()" class="bg-amber-50 hover:bg-amber-100 text-amber-800 border border-amber-300 px-3.5 py-1.5 rounded-xl text-xs font-bold transition-all flex items-center space-x-1.5">
+                                <i class="fa-solid fa-temperature-arrow-up text-amber-600"></i>
+                                <span>Simular Anormalidad Termometría</span>
+                            </button>
+                        </div>
+                    </div>
+
+                    <!-- Telemetry Sensor Cards -->
+                    <div class="grid grid-cols-1 md:grid-cols-3 gap-6 mb-6">
+                        
+                        <!-- Sensor 1: Nevera Industrial Cuarto Frío -->
+                        <div class="bg-white rounded-2xl p-5 border border-slate-200 shadow-sm relative overflow-hidden">
+                            <div class="flex justify-between items-start mb-3">
+                                <div>
+                                    <span class="text-[10px] font-mono bg-blue-50 text-blue-700 px-2 py-0.5 rounded font-bold">REF-101</span>
+                                    <h4 class="font-bold text-slate-800 text-sm mt-1">Nevera Industrial Cuarto Frío</h4>
+                                    <p class="text-xs text-slate-400">Casa de Convivencias El Solar</p>
+                                </div>
+                                <span class="w-2.5 h-2.5 rounded-full" :class="sensorData.neveraTemp > 6 ? 'bg-red-500 animate-bounce' : 'bg-emerald-500'"></span>
+                            </div>
+
+                            <div class="my-4 text-center py-4 bg-slate-50 rounded-xl border border-slate-100">
+                                <p class="text-xs text-slate-500 uppercase tracking-wider font-medium">Temperatura Interna</p>
+                                <p class="text-4xl font-extrabold mt-1" :class="sensorData.neveraTemp > 6 ? 'text-red-600' : 'text-slate-800'" x-text="sensorData.neveraTemp + ' °C'"></p>
+                                <p class="text-[11px] text-slate-400 mt-1">Rango Óptimo: 2°C a 5°C</p>
+                            </div>
+
+                            <div class="text-xs space-y-1.5 text-slate-600">
+                                <div class="flex justify-between">
+                                    <span>Compresor:</span>
+                                    <span class="font-semibold text-emerald-600">ENCENDIDO (100%)</span>
+                                </div>
+                                <div class="flex justify-between">
+                                    <span>Consumo Eléctrico:</span>
+                                    <span class="font-mono font-semibold" x-text="sensorData.neveraAmps + ' Amperios'"></span>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Sensor 2: Chiller Climatización Central -->
+                        <div class="bg-white rounded-2xl p-5 border border-slate-200 shadow-sm">
+                            <div class="flex justify-between items-start mb-3">
+                                <div>
+                                    <span class="text-[10px] font-mono bg-blue-50 text-blue-700 px-2 py-0.5 rounded font-bold">CLI-304</span>
+                                    <h4 class="font-bold text-slate-800 text-sm mt-1">Aire Acondicionado Chiller 10 TR</h4>
+                                    <p class="text-xs text-slate-400">Centro Universitario Los Andes</p>
+                                </div>
+                                <span class="w-2.5 h-2.5 rounded-full bg-emerald-500"></span>
+                            </div>
+
+                            <div class="my-4 text-center py-4 bg-slate-50 rounded-xl border border-slate-100">
+                                <p class="text-xs text-slate-500 uppercase tracking-wider font-medium">Vibración del Motor</p>
+                                <p class="text-4xl font-extrabold text-slate-800 mt-1">1.2 <span class="text-lg font-normal text-slate-500">mm/s</span></p>
+                                <p class="text-[11px] text-emerald-600 font-medium mt-1">&check; Niveles dentro de norma ISO</p>
+                            </div>
+
+                            <div class="text-xs space-y-1.5 text-slate-600">
+                                <div class="flex justify-between">
+                                    <span>Presión de Refrigerante:</span>
+                                    <span class="font-mono font-semibold">68 PSI (R-410A)</span>
+                                </div>
+                                <div class="flex justify-between">
+                                    <span>Horas de Uso Acumuladas:</span>
+                                    <span class="font-mono font-semibold">4,120 Horas</span>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Sensor 3: Planta Eléctrica Diésel -->
+                        <div class="bg-white rounded-2xl p-5 border border-slate-200 shadow-sm">
+                            <div class="flex justify-between items-start mb-3">
+                                <div>
+                                    <span class="text-[10px] font-mono bg-blue-50 text-blue-700 px-2 py-0.5 rounded font-bold">GEN-002</span>
+                                    <h4 class="font-bold text-slate-800 text-sm mt-1">Grupo Electrógeno 150 kVA</h4>
+                                    <p class="text-xs text-slate-400">Residencia Monteclaro</p>
+                                </div>
+                                <span class="w-2.5 h-2.5 rounded-full bg-slate-400"></span>
+                            </div>
+
+                            <div class="my-4 text-center py-4 bg-slate-50 rounded-xl border border-slate-100">
+                                <p class="text-xs text-slate-500 uppercase tracking-wider font-medium">Nivel de Combustible</p>
+                                <p class="text-4xl font-extrabold text-slate-800 mt-1">88 %</p>
+                                <p class="text-[11px] text-slate-400 mt-1">Estado: STANDBY Automático</p>
+                            </div>
+
+                            <div class="text-xs space-y-1.5 text-slate-600">
+                                <div class="flex justify-between">
+                                    <span>Voltaje de Batería:</span>
+                                    <span class="font-mono font-semibold">27.4 VDC</span>
+                                </div>
+                                <div class="flex justify-between">
+                                    <span>Prueba Automática Semanal:</span>
+                                    <span class="font-semibold text-brand-600">Sábado 09:00 AM</span>
+                                </div>
+                            </div>
+                        </div>
+
+                    </div>
+
+                    <!-- Telemetry Chart -->
+                    <div class="bg-white rounded-2xl p-5 border border-slate-200 shadow-sm">
+                        <h3 class="font-bold text-slate-800 text-sm mb-1">Histórico de Temperatura y Consumo (Últimas 24 Horas)</h3>
+                        <p class="text-xs text-slate-500 mb-4">Muestreo continuo para prevención de pérdidas de cadena de frío</p>
+                        <div class="h-64 relative">
+                            <canvas id="telemetryChart"></canvas>
+                        </div>
+                    </div>
+
+                </div>
+
+                <!-- VIEW 7: REPORTS & COST ANALYSIS -->
+                <div x-show="currentTab === 'reports'" space-y-6 x-cloak>
+                    
+                    <div class="bg-white rounded-2xl p-5 border border-slate-200 shadow-sm mb-6 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                        <div>
+                            <h2 class="font-bold text-slate-800 text-lg">Informes de Confiabilidad y Plan de Reemplazo</h2>
+                            <p class="text-xs text-slate-500">Evaluación de costos acumulados vs. valor de reposición de equipos</p>
+                        </div>
+                        <button @click="printReport()" class="bg-slate-800 hover:bg-slate-900 text-white px-4 py-2 rounded-xl text-xs font-bold flex items-center space-x-2 shadow-sm transition-colors">
+                            <i class="fa-solid fa-print"></i>
+                            <span>Exportar Informe PDF</span>
+                        </button>
+                    </div>
+
+                    <!-- Replacement Recommendation Index -->
+                    <div class="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden mb-6">
+                        <div class="p-4 bg-slate-50 border-b border-slate-200">
+                            <h3 class="font-bold text-slate-800 text-sm">Índice de Renovación Recomendada (Obsolescencia Tecnológica)</h3>
+                        </div>
+                        <div class="p-5 space-y-4">
+                            
+                            <!-- Item 1: Lavadora Industrial antigua -->
+                            <div class="p-4 rounded-xl border border-amber-200 bg-amber-50/50 flex flex-col md:flex-row md:items-center justify-between gap-4">
+                                <div class="space-y-1">
+                                    <div class="flex items-center space-x-2">
+                                        <span class="font-bold text-slate-800 text-sm">Secadora a Gas Industrial 25Kg (LAV-202)</span>
+                                        <span class="bg-amber-200 text-amber-800 text-[10px] font-bold px-2 py-0.5 rounded">Alto Costo de Reparación</span>
+                                    </div>
+                                    <p class="text-xs text-slate-600">Residencia Monteclaro • Antigüedad: 9 Años</p>
+                                    <p class="text-xs text-slate-500">El gasto acumulado en mantenimientos correctivos ($1,850) supera el 65% del valor de un equipo moderno Inverter.</p>
+                                </div>
+                                <div class="text-right flex-shrink-0">
+                                    <p class="text-xs text-slate-500 uppercase font-semibold">Recomendación</p>
+                                    <span class="text-sm font-bold text-amber-700">Sustitución en Q1 2027</span>
+                                </div>
+                            </div>
+
+                            <!-- Item 2: Split Antiguo R22 -->
+                            <div class="p-4 rounded-xl border border-red-200 bg-red-50/50 flex flex-col md:flex-row md:items-center justify-between gap-4">
+                                <div class="space-y-1">
+                                    <div class="flex items-center space-x-2">
+                                        <span class="font-bold text-slate-800 text-sm">Aire Acondicionado Split 24000 BTU (CLI-102)</span>
+                                        <span class="bg-red-200 text-red-800 text-[10px] font-bold px-2 py-0.5 rounded">Refrigerante Obsoleto R-22</span>
+                                    </div>
+                                    <p class="text-xs text-slate-600">Casa de Convivencias El Solar • Antigüedad: 11 Años</p>
+                                    <p class="text-xs text-slate-500">Consumo eléctrico excesivo (EER bajo). Compresor presenta fuga recurrente.</p>
+                                </div>
+                                <div class="text-right flex-shrink-0">
+                                    <p class="text-xs text-slate-500 uppercase font-semibold">Recomendación</p>
+                                    <span class="text-sm font-bold text-red-700">Reemplazo Inmediato</span>
+                                </div>
+                            </div>
+
+                        </div>
+                    </div>
+
+                </div>
+
+            </main>
+        </div>
+    </div>
+
+    <!-- MODAL 1: FICHA TÉCNICA Y HOJA DE VIDA DEL EQUIPO -->
+    <div x-show="openAssetModalFlag" x-cloak class="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+        <div @click.outside="openAssetModalFlag = false" class="bg-white rounded-2xl max-w-2xl w-full max-h-[90vh] overflow-y-auto custom-scrollbar border border-slate-200 shadow-2xl p-6">
+            <template x-if="activeAsset">
+                <div>
+                    <!-- Header -->
+                    <div class="flex justify-between items-start border-b border-slate-100 pb-4">
+                        <div>
+                            <span class="text-xs font-mono font-bold bg-slate-100 text-slate-700 px-2.5 py-1 rounded" x-text="activeAsset.code"></span>
+                            <h3 class="font-bold text-slate-800 text-xl mt-2" x-text="activeAsset.name"></h3>
+                            <p class="text-xs text-slate-500" x-text="activeAsset.brand + ' ' + activeAsset.model + ' • Ubicación: ' + activeAsset.location"></p>
+                        </div>
+                        <button @click="openAssetModalFlag = false" class="text-slate-400 hover:text-slate-600 text-xl">&times;</button>
+                    </div>
+
+                    <!-- Body Grid -->
+                    <div class="grid grid-cols-1 md:grid-cols-3 gap-4 my-6">
+                        
+                        <!-- Details Col -->
+                        <div class="md:col-span-2 space-y-3 text-xs">
+                            <div class="p-3 bg-slate-50 rounded-xl space-y-2">
+                                <div class="flex justify-between"><span class="text-slate-400">Número de Serie:</span> <strong class="font-mono" x-text="activeAsset.serial"></strong></div>
+                                <div class="flex justify-between"><span class="text-slate-400">Familia / Tipo:</span> <strong x-text="activeAsset.category"></strong></div>
+                                <div class="flex justify-between"><span class="text-slate-400">Especificaciones:</span> <strong x-text="activeAsset.specs"></strong></div>
+                                <div class="flex justify-between"><span class="text-slate-400">Fecha de Adquisición:</span> <strong x-text="activeAsset.purchaseDate || '15/03/2021'"></strong></div>
+                                <div class="flex justify-between"><span class="text-slate-400">MTBF Estimado:</span> <strong class="text-purple-600" x-text="activeAsset.mtbf + ' Horas'"></strong></div>
+                            </div>
+
+                            <h4 class="font-bold text-slate-800 text-xs pt-2">Histórico Reciente de Mantenimientos</h4>
+                            <div class="border border-slate-100 rounded-xl divide-y divide-slate-100 max-h-36 overflow-y-auto custom-scrollbar">
+                                <div class="p-2.5 flex justify-between items-center text-[11px]">
+                                    <div>
+                                        <p class="font-semibold text-slate-700">Mantenimiento Preventivo Semestral</p>
+                                        <p class="text-slate-400">Limpieza de serpentín y recarga de gas</p>
+                                    </div>
+                                    <span class="text-slate-500 font-mono">12/08/2026</span>
+                                </div>
+                                <div class="p-2.5 flex justify-between items-center text-[11px]">
+                                    <div>
+                                        <p class="font-semibold text-slate-700">Ajuste de Correas y Rodamientos</p>
+                                        <p class="text-slate-400">Reemplazo de rodamiento motor fan</p>
+                                    </div>
+                                    <span class="text-slate-500 font-mono">04/02/2026</span>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- QR Tag Simulation -->
+                        <div class="bg-slate-50 p-4 rounded-xl border border-slate-200 flex flex-col items-center justify-center text-center">
+                            <p class="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-2">Etiqueta de Activo Físico</p>
+                            <!-- Simulated SVG QR Code -->
+                            <div class="w-28 h-28 bg-white p-2 border border-slate-300 rounded-lg shadow-inner flex items-center justify-center">
+                                <i class="fa-solid fa-qrcode text-6xl text-slate-800"></i>
+                            </div>
+                            <p class="text-[10px] font-mono font-bold text-slate-700 mt-2" x-text="activeAsset.code"></p>
+                            <p class="text-[9px] text-slate-400 mt-1">Escanear para apertura rápida de OT</p>
+                        </div>
+
+                    </div>
+
+                    <!-- Footer -->
+                    <div class="flex justify-end space-x-2 border-t border-slate-100 pt-4">
+                        <button @click="openAssetModalFlag = false" class="px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 font-semibold text-xs rounded-xl">
+                            Cerrar
+                        </button>
+                    </div>
+                </div>
+            </template>
+        </div>
+    </div>
+
+    <!-- MODAL 2: EXECUTE PREVENTIVE CHECKLIST -->
+    <div x-show="openChecklistModal" x-cloak class="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+        <div @click.outside="openChecklistModal = false" class="bg-white rounded-2xl max-w-xl w-full border border-slate-200 shadow-2xl p-6">
+            <template x-if="activeChecklist">
+                <div>
+                    <div class="flex justify-between items-start border-b border-slate-100 pb-3">
+                        <div>
+                            <span class="bg-emerald-100 text-emerald-800 text-[10px] font-bold px-2 py-0.5 rounded">Rutina Preventiva Digital</span>
+                            <h3 class="font-bold text-slate-800 text-lg mt-1" x-text="activeChecklist.title"></h3>
+                            <p class="text-xs text-slate-500" x-text="'Equipo: ' + activeChecklist.assetName"></p>
+                        </div>
+                        <button @click="openChecklistModal = false" class="text-slate-400 hover:text-slate-600 text-xl">&times;</button>
+                    </div>
+
+                    <!-- Interactive Checkbox Items -->
+                    <div class="my-5 space-y-3">
+                        <template x-for="(item, index) in activeChecklist.items" :key="index">
+                            <label class="flex items-center space-x-3 p-3 bg-slate-50 rounded-xl hover:bg-slate-100 cursor-pointer transition-colors border border-slate-200">
+                                <input type="checkbox" x-model="item.done" class="w-4 h-4 text-emerald-600 rounded border-slate-300 focus:ring-emerald-500">
+                                <span class="text-xs font-medium text-slate-700" :class="item.done ? 'line-through text-slate-400' : ''" x-text="item.label"></span>
+                            </label>
+                        </template>
+                    </div>
+
+                    <div class="p-3 bg-slate-100 rounded-xl mb-4 flex items-center justify-between text-xs">
+                        <span class="text-slate-600">Progreso del mantenimiento:</span>
+                        <strong class="text-emerald-700 font-bold" x-text="getChecklistProgress() + '% Completado'"></strong>
+                    </div>
+
+                    <div class="flex justify-end space-x-2">
+                        <button @click="openChecklistModal = false" class="px-4 py-2 bg-slate-100 text-slate-700 font-semibold text-xs rounded-xl">Cancelar</button>
+                        <button @click="completeChecklist()" class="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white font-semibold text-xs rounded-xl shadow-sm">
+                            Registrar Mantenimiento &check;
+                        </button>
+                    </div>
+                </div>
+            </template>
+        </div>
+    </div>
+
+    <!-- MODAL 3: REPORTAR FALLA (NUEVA OT) -->
+    <div x-show="openReportModal" x-cloak class="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+        <div @click.outside="openReportModal = false" class="bg-white rounded-2xl max-w-lg w-full border border-slate-200 shadow-2xl p-6">
+            <div class="flex justify-between items-center border-b border-slate-100 pb-3">
+                <h3 class="font-bold text-slate-800 text-base flex items-center space-x-2">
+                    <i class="fa-solid fa-triangle-exclamation text-amber-500"></i>
+                    <span>Reportar Falla o Incidencia</span>
+                </h3>
+                <button @click="openReportModal = false" class="text-slate-400 hover:text-slate-600 text-xl">&times;</button>
+            </div>
+
+            <form @submit.prevent="submitWorkOrder()" class="mt-4 space-y-3 text-xs">
+                <div>
+                    <label class="block font-semibold text-slate-700 mb-1">Equipo Afectado</label>
+                    <select x-model="newOT.assetId" required class="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:border-brand-500">
+                        <option value="">-- Seleccionar Equipo --</option>
+                        <template x-for="a in assets" :key="a.id">
+                            <option :value="a.id" x-text="a.name + ' (' + a.location + ')'"></option>
+                        </template>
+                    </select>
+                </div>
+
+                <div>
+                    <label class="block font-semibold text-slate-700 mb-1">Título Breve de la Falla</label>
+                    <input type="text" x-model="newOT.title" placeholder="Ej: Fuga de agua en manguera o no enfría" required class="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:border-brand-500">
+                </div>
+
+                <div class="grid grid-cols-2 gap-3">
+                    <div>
+                        <label class="block font-semibold text-slate-700 mb-1">Nivel de Prioridad</label>
+                        <select x-model="newOT.priority" class="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:border-brand-500">
+                            <option value="Baja">Baja</option>
+                            <option value="Media">Media</option>
+                            <option value="Alta">Alta (Urgente)</option>
+                        </select>
+                    </div>
+                    <div>
+                        <label class="block font-semibold text-slate-700 mb-1">Técnico / Proveedor Asignado</label>
+                        <input type="text" x-model="newOT.technician" placeholder="Ej: ClimaTech / Carlos Ramírez" class="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:border-brand-500">
+                    </div>
+                </div>
+
+                <div>
+                    <label class="block font-semibold text-slate-700 mb-1">Descripción Detallada</label>
+                    <textarea x-model="newOT.description" rows="3" placeholder="Sintomas observados, ruidos extraños, códigos de error..." class="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:border-brand-500"></textarea>
+                </div>
+
+                <div class="pt-3 flex justify-end space-x-2">
+                    <button type="button" @click="openReportModal = false" class="px-4 py-2 bg-slate-100 text-slate-700 font-semibold rounded-xl">Cancelar</button>
+                    <button type="submit" class="px-4 py-2 bg-brand-600 hover:bg-brand-700 text-white font-semibold rounded-xl shadow-sm">
+                        Generar Orden de Trabajo
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- MODAL 4: AÑADIR NUEVO EQUIPO AL INVENTARIO -->
+    <div x-show="openAddAssetModal" x-cloak class="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+        <div @click.outside="openAddAssetModal = false" class="bg-white rounded-2xl max-w-lg w-full border border-slate-200 shadow-2xl p-6">
+            <div class="flex justify-between items-center border-b border-slate-100 pb-3">
+                <h3 class="font-bold text-slate-800 text-base">Registrar Nuevo Equipo en Inventario</h3>
+                <button @click="openAddAssetModal = false" class="text-slate-400 hover:text-slate-600 text-xl">&times;</button>
+            </div>
+
+            <form @submit.prevent="submitNewAsset()" class="mt-4 space-y-3 text-xs">
+                <div>
+                    <label class="block font-semibold text-slate-700 mb-1">Nombre del Equipo</label>
+                    <input type="text" x-model="newAssetForm.name" placeholder="Ej: Aire Acondicionado Split 18000 BTU" required class="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl">
+                </div>
+
+                <div class="grid grid-cols-2 gap-3">
+                    <div>
+                        <label class="block font-semibold text-slate-700 mb-1">Categoría</label>
+                        <select x-model="newAssetForm.category" class="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl">
+                            <option value="Climatización">Climatización</option>
+                            <option value="Refrigeración">Refrigeración</option>
+                            <option value="Lavandería">Lavandería</option>
+                            <option value="Cocina">Cocina</option>
+                            <option value="Servicios">Servicios / Planta</option>
+                        </select>
+                    </div>
+                    <div>
+                        <label class="block font-semibold text-slate-700 mb-1">Centro / Ubicación</label>
+                        <select x-model="newAssetForm.location" class="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl">
+                            <option value="Residencia Monteclaro">Residencia Monteclaro</option>
+                            <option value="Casa El Solar">Casa El Solar</option>
+                            <option value="Centro Los Andes">Centro Los Andes</option>
+                            <option value="Colegio Los Arcos">Colegio Los Arcos</option>
+                        </select>
+                    </div>
+                </div>
+
+                <div class="grid grid-cols-2 gap-3">
+                    <div>
+                        <label class="block font-semibold text-slate-700 mb-1">Marca</label>
+                        <input type="text" x-model="newAssetForm.brand" placeholder="Ej: Carrier / LG" class="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl">
+                    </div>
+                    <div>
+                        <label class="block font-semibold text-slate-700 mb-1">Número de Serie</label>
+                        <input type="text" x-model="newAssetForm.serial" placeholder="Ej: SN-998822" class="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl">
+                    </div>
+                </div>
+
+                <div class="pt-3 flex justify-end space-x-2">
+                    <button type="button" @click="openAddAssetModal = false" class="px-4 py-2 bg-slate-100 text-slate-700 font-semibold rounded-xl">Cancelar</button>
+                    <button type="submit" class="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white font-semibold rounded-xl shadow-sm">
+                        Guardar en Catálogo
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- MODAL 5: FICHA COMPLETA DEL PROVEEDOR E HISTORIAL DE FACTURAS -->
+    <div x-show="openSupplierModalFlag" x-cloak class="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+        <div @click.outside="openSupplierModalFlag = false" class="bg-white rounded-2xl max-w-3xl w-full max-h-[90vh] overflow-y-auto custom-scrollbar border border-slate-200 shadow-2xl p-6">
+            <template x-if="activeSupplier">
+                <div>
+                    <!-- Modal Header -->
+                    <div class="flex justify-between items-start border-b border-slate-100 pb-4">
+                        <div>
+                            <span class="text-xs font-semibold bg-orange-100 text-orange-800 px-2.5 py-1 rounded-md" x-text="activeSupplier.specialty"></span>
+                            <h3 class="font-bold text-slate-800 text-xl mt-2" x-text="activeSupplier.name"></h3>
+                            <p class="text-xs text-slate-500" x-text="'RIF / ID Fiscal: ' + activeSupplier.taxId + ' • Estado: ' + activeSupplier.status"></p>
+                        </div>
+                        <button @click="openSupplierModalFlag = false" class="text-slate-400 hover:text-slate-600 text-xl">&times;</button>
+                    </div>
+
+                    <!-- Contact & Financial Cards -->
+                    <div class="grid grid-cols-1 md:grid-cols-3 gap-3 my-4 text-xs">
+                        <div class="p-3 bg-slate-50 rounded-xl border border-slate-200 space-y-1">
+                            <span class="text-slate-400 uppercase text-[10px] font-bold">Persona de Contacto</span>
+                            <p class="font-bold text-slate-800" x-text="activeSupplier.contactPerson"></p>
+                            <p class="text-slate-500" x-text="activeSupplier.phone"></p>
+                        </div>
+
+                        <div class="p-3 bg-slate-50 rounded-xl border border-slate-200 space-y-1">
+                            <span class="text-slate-400 uppercase text-[10px] font-bold">Correo de Servicio</span>
+                            <p class="font-bold text-slate-800 truncate" x-text="activeSupplier.email"></p>
+                            <p class="text-amber-600 font-bold" x-text="'★ Evaluado con ' + activeSupplier.rating + '/5.0'"></p>
+                        </div>
+
+                        <div class="p-3 bg-emerald-50 rounded-xl border border-emerald-200 space-y-1">
+                            <span class="text-emerald-700 uppercase text-[10px] font-bold">Inversión Acumulada</span>
+                            <p class="text-xl font-extrabold text-emerald-800" x-text="'$' + activeSupplier.totalSpent.toLocaleString() + ' USD'"></p>
+                            <p class="text-[10px] text-emerald-600" x-text="activeSupplier.history.length + ' Intervenciones Facturadas'"></p>
+                        </div>
+                    </div>
+
+                    <!-- History Table for Supplier -->
+                    <h4 class="font-bold text-slate-800 text-sm mb-3">Historial Detallado de Mantenimientos e Intervenciones</h4>
+                    <div class="border border-slate-200 rounded-xl overflow-hidden mb-4">
+                        <table class="w-full text-left text-xs">
+                            <thead class="bg-slate-100 text-slate-600 uppercase font-semibold text-[10px]">
+                                <tr>
+                                    <th class="p-3">Fecha</th>
+                                    <th class="p-3">Equipo / Código</th>
+                                    <th class="p-3">Centro</th>
+                                    <th class="p-3">Tipo</th>
+                                    <th class="p-3">Trabajo / Servicio Realizado</th>
+                                    <th class="p-3">N° Factura</th>
+                                    <th class="p-3 text-right">Monto</th>
+                                </tr>
+                            </thead>
+                            <tbody class="divide-y divide-slate-100">
+                                <template x-for="(h, i) in activeSupplier.history" :key="i">
+                                    <tr class="hover:bg-slate-50">
+                                        <td class="p-3 font-mono font-semibold text-slate-700" x-text="h.date"></td>
+                                        <td class="p-3">
+                                            <div class="font-semibold text-slate-800" x-text="h.assetName"></div>
+                                            <div class="text-[10px] font-mono text-slate-400" x-text="h.assetCode"></div>
+                                        </td>
+                                        <td class="p-3 text-slate-600" x-text="h.center"></td>
+                                        <td class="p-3">
+                                            <span class="px-2 py-0.5 rounded text-[10px] font-bold" :class="h.type === 'Preventivo' ? 'bg-blue-50 text-blue-700' : 'bg-amber-50 text-amber-700'" x-text="h.type"></span>
+                                        </td>
+                                        <td class="p-3 text-slate-600 max-w-xs" x-text="h.description"></td>
+                                        <td class="p-3 font-mono text-slate-500" x-text="h.invoice"></td>
+                                        <td class="p-3 text-right font-bold text-emerald-700 font-mono" x-text="'$' + h.cost + ' USD'"></td>
+                                    </tr>
+                                </template>
+                            </tbody>
+                        </table>
+                    </div>
+
+                    <!-- Footer -->
+                    <div class="flex justify-end border-t border-slate-100 pt-3">
+                        <button @click="openSupplierModalFlag = false" class="px-4 py-2 bg-slate-100 text-slate-700 font-semibold text-xs rounded-xl hover:bg-slate-200">
+                            Cerrar Ficha
+                        </button>
+                    </div>
+                </div>
+            </template>
+        </div>
+    </div>
+
+    <!-- MODAL 6: REGISTRAR NUEVO PROVEEDOR -->
+    <div x-show="openAddSupplierModal" x-cloak class="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+        <div @click.outside="openAddSupplierModal = false" class="bg-white rounded-2xl max-w-lg w-full border border-slate-200 shadow-2xl p-6">
+            <div class="flex justify-between items-center border-b border-slate-100 pb-3">
+                <h3 class="font-bold text-slate-800 text-base">Registrar Nuevo Proveedor / Contratista</h3>
+                <button @click="openAddSupplierModal = false" class="text-slate-400 hover:text-slate-600 text-xl">&times;</button>
+            </div>
+
+            <form @submit.prevent="submitNewSupplier()" class="mt-4 space-y-3 text-xs">
+                <div>
+                    <label class="block font-semibold text-slate-700 mb-1">Nombre Comercial de la Empresa</label>
+                    <input type="text" x-model="newSupplierForm.name" placeholder="Ej: Serviclima Express C.A." required class="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:border-orange-500">
+                </div>
+
+                <div class="grid grid-cols-2 gap-3">
+                    <div>
+                        <label class="block font-semibold text-slate-700 mb-1">Especialidad Técnica</label>
+                        <select x-model="newSupplierForm.specialty" class="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:border-orange-500">
+                            <option value="Climatización">Climatización / Chillers</option>
+                            <option value="Refrigeración">Refrigeración Comercial</option>
+                            <option value="Lavandería">Lavandería Industrial</option>
+                            <option value="Generadores">Generadores / Plantas</option>
+                            <option value="Cocina">Equipos de Cocina</option>
+                        </select>
+                    </div>
+                    <div>
+                        <label class="block font-semibold text-slate-700 mb-1">RIF / N° Identificación Fiscal</label>
+                        <input type="text" x-model="newSupplierForm.taxId" placeholder="Ej: J-30491820-1" required class="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:border-orange-500">
+                    </div>
+                </div>
+
+                <div class="grid grid-cols-2 gap-3">
+                    <div>
+                        <label class="block font-semibold text-slate-700 mb-1">Persona de Contacto</label>
+                        <input type="text" x-model="newSupplierForm.contactPerson" placeholder="Ej: Ing. Pedro Ramírez" required class="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:border-orange-500">
+                    </div>
+                    <div>
+                        <label class="block font-semibold text-slate-700 mb-1">Teléfono Directo</label>
+                        <input type="text" x-model="newSupplierForm.phone" placeholder="Ej: +58 414-123-4567" required class="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:border-orange-500">
+                    </div>
+                </div>
+
+                <div>
+                    <label class="block font-semibold text-slate-700 mb-1">Correo Electrónico</label>
+                    <input type="email" x-model="newSupplierForm.email" placeholder="Ej: contacto@empresa.com" required class="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:border-orange-500">
+                </div>
+
+                <div class="pt-3 flex justify-end space-x-2">
+                    <button type="button" @click="openAddSupplierModal = false" class="px-4 py-2 bg-slate-100 text-slate-700 font-semibold rounded-xl">Cancelar</button>
+                    <button type="submit" class="px-4 py-2 bg-orange-600 hover:bg-orange-700 text-white font-semibold rounded-xl shadow-sm">
+                        Registrar Proveedor
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <script>
+        function appData() {
+            return {
+                currentTab: 'dashboard',
+                mobileNavOpen: false,
+                selectedCenter: 'ALL',
+                searchQuery: '',
+                categoryFilter: 'ALL',
+
+                // Supplier Filters
+                supplierSearch: '',
+                supplierFilter: 'ALL',
+
+                // Modals Flags
+                openAssetModalFlag: false,
+                openChecklistModal: false,
+                openReportModal: false,
+                openAddAssetModal: false,
+                openSupplierModalFlag: false,
+                openAddSupplierModal: false,
+
+                // Active Items for Modals
+                activeAsset: null,
+                activeChecklist: null,
+                activeSupplier: null,
+
+                // Toast Feedback State
+                toast: {
+                    visible: false,
+                    title: '',
+                    message: '',
+                    type: 'success'
+                },
+
+                showToast(title, message, type = 'success') {
+                    this.toast.title = title;
+                    this.toast.message = message;
+                    this.toast.type = type;
+                    this.toast.visible = true;
+                    setTimeout(() => { this.toast.visible = false; }, 4000);
+                },
+
+                // Telemetry Live Simulated Data
+                sensorData: {
+                    neveraTemp: 3.8,
+                    neveraAmps: 12.4
+                },
+
+                // Real-time Notification Alerts
+                alerts: [
+                    { id: 1, title: 'Presión alta en Chiller Principal', location: 'Centro Los Andes', time: 'Hace 15 min' },
+                    { id: 2, title: 'Preventivo Semestral Pendiente', location: 'Residencia Monteclaro', time: 'Hace 1 hora' }
+                ],
+
+                // Equipment Assets Inventory Database
+                assets: [
+                    { id: 1, code: 'CLI-001', name: 'Aire Acondicionado Split 24000 BTU', category: 'Climatización', location: 'Residencia Monteclaro', brand: 'Daikin', model: 'FTX24', serial: 'SN-449102', specs: 'Inverter R-410A', mtbf: 820, status: 'Operativo', lastMaintenance: '10/09/2026', nextMaintenance: '10/11/2026' },
+                    { id: 2, code: 'REF-101', name: 'Nevera Industrial Cuarto Frío', category: 'Refrigeración', location: 'Casa El Solar', brand: 'True Manufacturing', model: 'T-49-HC', serial: 'SN-882103', specs: '2 Puertas Inox 220V', mtbf: 650, status: 'Operativo', lastMaintenance: '01/08/2026', nextMaintenance: '01/11/2026' },
+                    { id: 3, code: 'LAV-201', name: 'Lavadora Industrial 20 Kg', category: 'Lavandería', location: 'Residencia Monteclaro', brand: 'Girbau', model: 'HS-6020', serial: 'SN-332901', specs: 'Centrifugado 1000 RPM', mtbf: 540, status: 'En Mantenimiento', lastMaintenance: '15/09/2026', nextMaintenance: '15/10/2026' },
+                    { id: 4, code: 'COC-301', name: 'Horno Convector Combi 10 Bandejas', category: 'Cocina', location: 'Centro Los Andes', brand: 'Rational', model: 'iCombi Pro', serial: 'SN-110293', specs: 'Trifásico 380V Gas/Elec', mtbf: 910, status: 'Operativo', lastMaintenance: '20/07/2026', nextMaintenance: '20/10/2026' },
+                    { id: 5, code: 'CLI-102', name: 'Aire Acondicionado Split 24000 BTU', category: 'Climatización', location: 'Casa El Solar', brand: 'LG', model: 'Gold-24', serial: 'SN-002911', specs: 'Gas R-22 (Obsoleto)', mtbf: 320, status: 'En Falla', lastMaintenance: '02/05/2026', nextMaintenance: '02/08/2026' },
+                    { id: 6, code: 'GEN-001', name: 'Planta Eléctrica Diésel 150 kVA', category: 'Servicios', location: 'Residencia Monteclaro', brand: 'Caterpillar', model: 'DE150E2', serial: 'SN-772910', specs: 'Motor C6.6 Transferencia Aut', mtbf: 1200, status: 'Operativo', lastMaintenance: '12/09/2026', nextMaintenance: '12/12/2026' },
+                    { id: 7, code: 'LAV-202', name: 'Secadora a Gas Industrial 25Kg', category: 'Lavandería', location: 'Colegio Los Arcos', brand: 'Speed Queen', model: 'ST055', serial: 'SN-554109', specs: 'GLP 120.000 BTU', mtbf: 480, status: 'Operativo', lastMaintenance: '18/08/2026', nextMaintenance: '18/11/2026' }
+                ],
+
+                // NUEVO DATASET: PROVEEDORES Y CONTRATISTAS DE MANTENIMIENTO
+                suppliers: [
+                    {
+                        id: 1,
+                        name: 'ClimaTech Soluciones C.A.',
+                        specialty: 'Climatización',
+                        contactPerson: 'Ing. Fernando Mendoza',
+                        phone: '+58 414-555-0192',
+                        email: 'servicio@climatech.com',
+                        taxId: 'J-30948201-9',
+                        rating: 4.9,
+                        status: 'Activo',
+                        totalSpent: 3250,
+                        lastServiceDate: '10/09/2026',
+                        history: [
+                            { date: '10/09/2026', assetCode: 'CLI-001', assetName: 'Aire Split 24000 BTU', center: 'Residencia Monteclaro', type: 'Preventivo', description: 'Limpieza profunda de serpentín condensador, filtros y recarga R-410A', cost: 180, invoice: 'FACT-4091' },
+                            { date: '02/05/2026', assetCode: 'CLI-102', assetName: 'Aire Split 24000 BTU', center: 'Casa El Solar', type: 'Correctivo', description: 'Diagnóstico de fuga de compresión y presurización con nitrógeno', cost: 120, invoice: 'FACT-3820' },
+                            { date: '15/01/2026', assetCode: 'CLI-304', assetName: 'Chiller 10 TR', center: 'Centro Los Andes', type: 'Preventivo', description: 'Cambio de filtros de aceite y calibración de válvula expansora', cost: 650, invoice: 'FACT-3411' }
+                        ]
+                    },
+                    {
+                        id: 2,
+                        name: 'Frío Industrial & Servicenter',
+                        specialty: 'Refrigeración',
+                        contactPerson: 'Téc. Roberto Gómez',
+                        phone: '+58 412-888-3412',
+                        email: 'soporte@frioindustrial.com',
+                        taxId: 'J-29811402-4',
+                        rating: 4.7,
+                        status: 'Activo',
+                        totalSpent: 2200,
+                        lastServiceDate: '01/08/2026',
+                        history: [
+                            { date: '01/08/2026', assetCode: 'REF-101', assetName: 'Nevera Industrial Cuarto Frío', center: 'Casa El Solar', type: 'Preventivo', description: 'Mantenimiento mensual, ajuste de empacaduras y chequeo de gas', cost: 150, invoice: 'FACT-8821' },
+                            { date: '14/03/2026', assetCode: 'REF-101', assetName: 'Nevera Industrial Cuarto Frío', center: 'Casa El Solar', type: 'Correctivo', description: 'Reemplazo de termostato digital e interruptor térmico de arranque', cost: 240, invoice: 'FACT-8102' }
+                        ]
+                    },
+                    {
+                        id: 3,
+                        name: 'ElectroLav S.A.',
+                        specialty: 'Lavandería',
+                        contactPerson: 'Sr. Marcos Rivas',
+                        phone: '+58 424-333-9081',
+                        email: 'mrivas@electrolav.com',
+                        taxId: 'J-40192833-0',
+                        rating: 4.8,
+                        status: 'Activo',
+                        totalSpent: 1820,
+                        lastServiceDate: '15/09/2026',
+                        history: [
+                            { date: '15/09/2026', assetCode: 'LAV-201', assetName: 'Lavadora Industrial 20 Kg', center: 'Residencia Monteclaro', type: 'Correctivo', description: 'Sustitución de rodamientos de tambor y retenes de sello hídrico', cost: 320, invoice: 'FACT-1092' },
+                            { date: '18/08/2026', assetCode: 'LAV-202', assetName: 'Secadora a Gas Industrial', center: 'Colegio Los Arcos', type: 'Preventivo', description: 'Limpieza de trampa de pelusa y calibración de quemadores GLP', cost: 130, invoice: 'FACT-0988' }
+                        ]
+                    },
+                    {
+                        id: 4,
+                        name: 'PowerGen Plantas & Motores',
+                        specialty: 'Generadores',
+                        contactPerson: 'Ing. Carlos Ramos',
+                        phone: '+58 416-777-2100',
+                        email: 'cramos@powergen.com.ve',
+                        taxId: 'J-31029384-5',
+                        rating: 5.0,
+                        status: 'Activo',
+                        totalSpent: 2850,
+                        lastServiceDate: '28/09/2026',
+                        history: [
+                            { date: '28/09/2026', assetCode: 'GEN-001', assetName: 'Planta Eléctrica Diésel 150 kVA', center: 'Residencia Monteclaro', type: 'Preventivo', description: 'Cambio de aceite diésel, sustitución de filtros de combustible y aire', cost: 310, invoice: 'FACT-7712' },
+                            { date: '12/04/2026', assetCode: 'GEN-001', assetName: 'Planta Eléctrica Diésel 150 kVA', center: 'Residencia Monteclaro', type: 'Correctivo', description: 'Mantenimiento del módulo ATS de transferencia automática', cost: 420, invoice: 'FACT-7104' }
+                        ]
+                    },
+                    {
+                        id: 5,
+                        name: 'Cocinas Industriales Gastrotech',
+                        specialty: 'Cocina',
+                        contactPerson: 'Téc. Pedro Gómez',
+                        phone: '+58 414-222-8811',
+                        email: 'contacto@gastrotech.com',
+                        taxId: 'J-18293048-1',
+                        rating: 4.6,
+                        status: 'Activo',
+                        totalSpent: 1150,
+                        lastServiceDate: '20/07/2026',
+                        history: [
+                            { date: '20/07/2026', assetCode: 'COC-301', assetName: 'Horno Convector Combi 10 B', center: 'Centro Los Andes', type: 'Preventivo', description: 'Descalcificación de boiler e inspección de sonda del núcleo térmico', cost: 210, invoice: 'FACT-5531' }
+                        ]
+                    }
+                ],
+
+                // Preventive Maintenance Schedule
+                pmSchedules: [
+                    { id: 101, title: 'Limpieza de Filtros y Control de Gas Refrigerante', assetName: 'Aire Acondicionado Split 24000 BTU (CLI-001)', center: 'Residencia Monteclaro', frequency: 'Bimensual', scheduledDate: '12/10/2026', technician: 'ClimaTech C.A.', taskCount: 4 },
+                    { id: 102, title: 'Inspección de Empaques y Descongelado de Evaporador', assetName: 'Nevera Industrial Cuarto Frío (REF-101)', center: 'Casa El Solar', frequency: 'Mensual', scheduledDate: '15/10/2026', technician: 'Frío Industrial', taskCount: 3 },
+                    { id: 103, title: 'Revisión de Trampa de Pelusas y Tensión de Banda', assetName: 'Secadora a Gas Industrial (LAV-202)', center: 'Colegio Los Arcos', frequency: 'Trimestral', scheduledDate: '20/10/2026', technician: 'ElectroLav S.A.', taskCount: 4 }
+                ],
+
+                // Work Orders (Kanban)
+                workOrders: [
+                    { id: 1, code: 'OT-2026-081', title: 'Ruido extraño en rodamiento del tambor', assetName: 'Lavadora Industrial 20 Kg', center: 'Residencia Monteclaro', priority: 'Media', status: 'En Proceso', date: '04/10/2026', technician: 'ElectroLav S.A.', cost: 120 },
+                    { id: 2, code: 'OT-2026-082', title: 'Fuga de gas refrigerante y falta de enfriamiento', assetName: 'Aire Split 24000 BTU (CLI-102)', center: 'Casa El Solar', priority: 'Alta', status: 'Solicitada', date: '06/10/2026', technician: 'Por Asignar', cost: 250 },
+                    { id: 3, code: 'OT-2026-079', title: 'Mantenimiento de Quemadores de Gas', assetName: 'Horno Convector Combi', center: 'Centro Los Andes', priority: 'Baja', status: 'Programada', date: '01/10/2026', technician: 'Gastrotech', cost: 85 },
+                    { id: 4, code: 'OT-2026-075', title: 'Cambio de Aceite y Filtros de Planta Eléctrica', assetName: 'Planta Eléctrica Diésel 150 kVA', center: 'Residencia Monteclaro', priority: 'Media', status: 'Completada', date: '28/09/2026', technician: 'PowerGen Motores', cost: 310 }
+                ],
+
+                // Forms State
+                newOT: { assetId: '', title: '', priority: 'Media', technician: '', description: '' },
+                newAssetForm: { name: '', category: 'Climatización', location: 'Residencia Monteclaro', brand: '', serial: '' },
+                newSupplierForm: { name: '', specialty: 'Climatización', contactPerson: '', phone: '', email: '', taxId: '' },
+
+                // Filtered Assets Computed Helper
+                get filteredAssets() {
+                    return this.assets.filter(asset => {
+                        const matchesCenter = this.selectedCenter === 'ALL' || asset.location === this.selectedCenter;
+                        const matchesCategory = this.categoryFilter === 'ALL' || asset.category === this.categoryFilter;
+                        const matchesQuery = this.searchQuery === '' || 
+                            asset.name.toLowerCase().includes(this.searchQuery.toLowerCase()) ||
+                            asset.code.toLowerCase().includes(this.searchQuery.toLowerCase()) ||
+                            asset.serial.toLowerCase().includes(this.searchQuery.toLowerCase());
+                        return matchesCenter && matchesCategory && matchesQuery;
+                    });
+                },
+
+                // Filtered Suppliers Helper
+                get filteredSuppliers() {
+                    return this.suppliers.filter(sup => {
+                        const matchesFilter = this.supplierFilter === 'ALL' || sup.specialty.toLowerCase().includes(this.supplierFilter.toLowerCase());
+                        const matchesQuery = this.supplierSearch === '' ||
+                            sup.name.toLowerCase().includes(this.supplierSearch.toLowerCase()) ||
+                            sup.contactPerson.toLowerCase().includes(this.supplierSearch.toLowerCase()) ||
+                            sup.specialty.toLowerCase().includes(this.supplierSearch.toLowerCase());
+                        return matchesFilter && matchesQuery;
+                    });
+                },
+
+                getTotalSuppliersSpend() {
+                    return this.suppliers.reduce((sum, s) => sum + s.totalSpent, 0);
+                },
+
+                getTotalInterventionsCount() {
+                    return this.suppliers.reduce((sum, s) => sum + s.history.length, 0);
+                },
+
+                getAllInterventions() {
+                    let list = [];
+                    this.suppliers.forEach(s => {
+                        s.history.forEach(h => {
+                            list.push({
+                                ...h,
+                                supplierName: s.name,
+                                contactPerson: s.contactPerson
+                            });
+                        });
+                    });
+                    // Filter by selected center if active
+                    if (this.selectedCenter !== 'ALL') {
+                        list = list.filter(item => item.center === this.selectedCenter);
+                    }
+                    return list;
+                },
+
+                openSupplierModal(supplier) {
+                    this.activeSupplier = supplier;
+                    this.openSupplierModalFlag = true;
+                },
+
+                submitNewSupplier() {
+                    const newId = this.suppliers.length + 1;
+                    this.suppliers.push({
+                        id: newId,
+                        name: this.newSupplierForm.name,
+                        specialty: this.newSupplierForm.specialty,
+                        contactPerson: this.newSupplierForm.contactPerson,
+                        phone: this.newSupplierForm.phone,
+                        email: this.newSupplierForm.email,
+                        taxId: this.newSupplierForm.taxId,
+                        rating: 5.0,
+                        status: 'Activo',
+                        totalSpent: 0,
+                        lastServiceDate: 'Sin Servicios',
+                        history: []
+                    });
+
+                    this.openAddSupplierModal = false;
+                    this.showToast('Proveedor Registrado', 'La empresa fue incorporada al directorio de contratistas homologados.');
+                    this.newSupplierForm = { name: '', specialty: 'Climatización', contactPerson: '', phone: '', email: '', taxId: '' };
+                },
+
+                // Helper date check
+                isNear(dateStr) {
+                    return dateStr.includes('10/2026');
+                },
+
+                openAssetModal(asset) {
+                    this.activeAsset = asset;
+                    this.openAssetModalFlag = true;
+                },
+
+                startChecklist(pm) {
+                    this.activeChecklist = {
+                        title: pm.title,
+                        assetName: pm.assetName,
+                        items: [
+                            { label: 'Limpieza profunda de filtros de aire / serpentín condensador', done: true },
+                            { label: 'Medición de presion de gas refrigerante (Psi en baja/alta)', done: false },
+                            { label: 'Verificación de consumo eléctrico (Amperaje de compresor)', done: false },
+                            { label: 'Revisión y desobstrucción de bandeja de drenaje de condensado', done: false }
+                        ]
+                    };
+                    this.openChecklistModal = true;
+                },
+
+                getChecklistProgress() {
+                    if (!this.activeChecklist) return 0;
+                    const doneCount = this.activeChecklist.items.filter(i => i.done).length;
+                    return Math.round((doneCount / this.activeChecklist.items.length) * 100);
+                },
+
+                completeChecklist() {
+                    this.openChecklistModal = false;
+                    this.showToast('Mantenimiento Registrado', 'La rutina preventiva fue completada satisfactoriamente en la hoja de vida.');
+                },
+
+                moveOrderStatus(order, newStatus) {
+                    order.status = newStatus;
+                    this.showToast('Orden de Trabajo Actualizada', `La orden ${order.code} pasó a estado: ${newStatus}`);
+                },
+
+                submitWorkOrder() {
+                    const selectedAssetObj = this.assets.find(a => a.id == this.newOT.assetId) || { name: 'Equipo Desconocido', location: 'Sede Central' };
+                    const newCode = 'OT-2026-0' + (this.workOrders.length + 83);
+                    
+                    this.workOrders.unshift({
+                        id: Date.now(),
+                        code: newCode,
+                        title: this.newOT.title,
+                        assetName: selectedAssetObj.name,
+                        center: selectedAssetObj.location,
+                        priority: this.newOT.priority,
+                        status: 'Solicitada',
+                        date: 'Hoy',
+                        technician: this.newOT.technician || 'Por Asignar',
+                        cost: 150
+                    });
+
+                    this.openReportModal = false;
+                    this.showToast('Falla Reportada', `Se ha generado la OT ${newCode} exitosamente.`);
+                    this.newOT = { assetId: '', title: '', priority: 'Media', technician: '', description: '' };
+                },
+
+                submitNewAsset() {
+                    const newId = this.assets.length + 1;
+                    const catPrefix = this.newAssetForm.category.substring(0,3).toUpperCase();
+                    
+                    this.assets.push({
+                        id: newId,
+                        code: `${catPrefix}-00${newId}`,
+                        name: this.newAssetForm.name,
+                        category: this.newAssetForm.category,
+                        location: this.newAssetForm.location,
+                        brand: this.newAssetForm.brand || 'Genérica',
+                        model: 'Mod-2026',
+                        serial: this.newAssetForm.serial || 'SN-' + Math.floor(Math.random()*900000 + 100000),
+                        specs: 'Estándar Industrial',
+                        mtbf: 700,
+                        status: 'Operativo',
+                        lastMaintenance: 'Hoy',
+                        nextMaintenance: '12/2026'
+                    });
+
+                    this.openAddAssetModal = false;
+                    this.showToast('Nuevo Equipo Registrado', 'El activo fue incorporado correctamente al inventario general.');
+                    this.newAssetForm = { name: '', category: 'Climatización', location: 'Residencia Monteclaro', brand: '', serial: '' };
+                },
+
+                triggerSimulatedAlert() {
+                    this.sensorData.neveraTemp = 8.5; // Trigger High Temperature
+                    this.alerts.unshift({
+                        id: Date.now(),
+                        title: '⚠️ ALERTA TEMPERATURA: Nevera Cuarto Frío excedió 8°C',
+                        location: 'Casa El Solar',
+                        time: 'Ahora mismo'
+                    });
+                    this.showToast('¡Alerta de Confiabilidad IoT!', 'La Nevera Industrial (Casa El Solar) registró 8.5°C (Límite máximo 5°C)', 'danger');
+                },
+
+                printReport() {
+                    window.print();
+                },
+
+                initCharts() {
+                    this.$nextTick(() => {
+                        // Chart 1: Expenses Bar Chart
+                        const ctxExpenses = document.getElementById('expensesChart');
+                        if (ctxExpenses) {
+                            new Chart(ctxExpenses, {
+                                type: 'bar',
+                                data: {
+                                    labels: ['Climatización (A/A)', 'Refrigeración', 'Lavandería', 'Cocina', 'Generadores'],
+                                    datasets: [
+                                        { label: 'Mant. Preventivo ($)', data: [2400, 1800, 1200, 1500, 900], backgroundColor: '#0b69a3', borderRadius: 6 },
+                                        { label: 'Mant. Correctivo ($)', data: [850, 400, 950, 300, 200], backgroundColor: '#d97706', borderRadius: 6 }
+                                    ]
+                                },
+                                options: {
+                                    responsive: true,
+                                    maintainAspectRatio: false,
+                                    plugins: { legend: { position: 'bottom', labels: { boxWidth: 12, font: { size: 11 } } } },
+                                    scales: { y: { beginAtZero: true, grid: { color: '#f1f5f9' } }, x: { grid: { display: false } } }
+                                }
+                            });
+                        }
+
+                        // Chart 2: Status Doughnut
+                        const ctxStatus = document.getElementById('statusChart');
+                        if (ctxStatus) {
+                            new Chart(ctxStatus, {
+                                type: 'doughnut',
+                                data: {
+                                    labels: ['Operativo', 'En Mantenimiento', 'En Falla'],
+                                    datasets: [{
+                                        data: [5, 1, 1],
+                                        backgroundColor: ['#10b981', '#f59e0b', '#ef4444'],
+                                        borderWidth: 0
+                                    }]
+                                },
+                                options: {
+                                    responsive: true,
+                                    maintainAspectRatio: false,
+                                    cutout: '75%',
+                                    plugins: { legend: { display: false } }
+                                }
+                            });
+                        }
+
+                        // Chart 3: Telemetry Line Chart
+                        const ctxTelemetry = document.getElementById('telemetryChart');
+                        if (ctxTelemetry) {
+                            new Chart(ctxTelemetry, {
+                                type: 'line',
+                                data: {
+                                    labels: ['00:00', '04:00', '08:00', '12:00', '16:00', '20:00', 'Ahora'],
+                                    datasets: [
+                                        { label: 'Temp. Nevera Cuarto Frío (°C)', data: [3.2, 3.4, 3.1, 4.0, 3.8, 3.9, 3.8], borderColor: '#0284c7', tension: 0.3, fill: false },
+                                        { label: 'Límite Máximo Crítico (5.0°C)', data: [5, 5, 5, 5, 5, 5, 5], borderColor: '#ef4444', borderDash: [5, 5], fill: false, pointRadius: 0 }
+                                    ]
+                                },
+                                options: {
+                                    responsive: true,
+                                    maintainAspectRatio: false,
+                                    plugins: { legend: { position: 'bottom', labels: { boxWidth: 12 } } },
+                                    scales: { y: { min: 0, max: 10 } }
+                                }
+                            });
+                        }
+                    });
+                }
+            }
+        }
+    </script>
+</body>
+</html>
